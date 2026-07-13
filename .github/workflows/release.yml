@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  macos-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Select Xcode 16.2
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+      - name: Swift version
+        run: swift --version
+      - name: Validate tag
+        run: test "$GITHUB_REF_NAME" = "v$(tr -d '[:space:]' < VERSION)"
+      - run: swift test
+      - run: swift build -c release --product twt
+      - run: scripts/package-release.sh macos arm64 .build/release/twt .build/release/twt
+      - name: Smoke test packaged binary
+        run: |
+          stage="$(mktemp -d)"
+          tar -xzf dist/treepool-*-macos-arm64.tar.gz -C "$stage"
+          test "$($stage/twt --version)" = "$(cat VERSION)"
+          "$stage/twt" --help >/dev/null
+          test "$(file "$stage/twt")" != ""
+          scripts/smoke-test.sh "$stage/twt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: macos-arm64
+          path: dist/*.tar.gz
+
+  linux:
+    runs-on: ubuntu-24.04
+    container: swift:6.3.3-noble
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-swift-linux-musl
+            architecture: x86_64
+          - target: aarch64-swift-linux-musl
+            architecture: aarch64
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Swift version
+        run: swift --version
+      - name: Install release tools
+        run: |
+          apt-get update
+          apt-get install -y file
+      - name: Install QEMU
+        if: matrix.architecture == 'aarch64'
+        run: apt-get install -y qemu-user
+      - name: Validate tag
+        run: test "$GITHUB_REF_NAME" = "v$(tr -d '[:space:]' < VERSION)"
+      - run: swift test
+      - run: swift build -c release --product twt
+      - name: Preserve host CLI for completion generation
+        run: install -m 0755 .build/release/twt .build/twt-host
+      - name: Install static Linux SDK
+        run: |
+          swift sdk install \
+            https://download.swift.org/swift-6.3.3-release/static-sdk/swift-6.3.3-RELEASE/swift-6.3.3-RELEASE_static-linux-0.1.0.artifactbundle.tar.gz \
+            --checksum 87c3eaf908e67c0e13a84367119e12273cec1d2cd3d81f7d74bb36722d6b607b
+      - run: scripts/build-static-linux.sh "${{ matrix.target }}"
+      - run: scripts/package-release.sh linux "${{ matrix.architecture }}" ".build/${{ matrix.target }}/release/twt" .build/twt-host
+      - name: Verify static binary
+        run: file ".build/${{ matrix.target }}/release/twt" | grep "statically linked" >/dev/null
+      - name: Smoke test x86_64 binary
+        if: matrix.architecture == 'x86_64'
+        run: |
+          test "$(.build/${{ matrix.target }}/release/twt --version)" = "$(cat VERSION)"
+          scripts/smoke-test.sh ".build/${{ matrix.target }}/release/twt"
+      - name: Smoke test ARM64 binary
+        if: matrix.architecture == 'aarch64'
+        run: test "$(qemu-aarch64 .build/${{ matrix.target }}/release/twt --version)" = "$(cat VERSION)"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-${{ matrix.architecture }}
+          path: dist/*.tar.gz
+
+  publish:
+    needs: [macos-arm64, linux]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: "*"
+          merge-multiple: true
+          path: dist
+      - name: Build release manifest
+        run: |
+          cd dist
+          sha256sum *.tar.gz > SHA256SUMS
+          printf '{"version":"%s","artifacts":' "$(cat ../VERSION)" > dependency-manifest.json
+          find . -maxdepth 1 -name '*.tar.gz' -printf '%f\n' | sort | jq -R . | jq -s . >> dependency-manifest.json
+          printf '}\n' >> dependency-manifest.json
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
+        with:
+          subject-path: "dist/*"
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        with:
+          generate_release_notes: true
+          files: dist/*

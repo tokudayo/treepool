@@ -1,0 +1,10 @@
+.build/
+.swiftpm/
+*.xcodeproj/
+*.xcworkspace/
+.DS_Store
+Treepool.app/
+dist/
+DerivedData/
+xcuserdata/
+*.xcuserstate

@@ -1,0 +1,5 @@
+# Third-party notices
+
+Treepool's CLI includes Apple Swift Argument Parser, licensed under the Apache
+License 2.0. Release archives include its complete license text at
+`LICENSES/swift-argument-parser.txt`.

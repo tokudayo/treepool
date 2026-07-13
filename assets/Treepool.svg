@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">Treepool</title>
+  <rect width="1024" height="1024" rx="224" fill="#161b22"/>
+  <g fill="#ffffff" transform="translate(134 92) scale(42)">
+    <rect x="3" y="5" width="3" height="8" rx="1.5"/>
+    <rect x="7.5" y="4" width="3" height="10" rx="1.5"/>
+    <rect x="12" y="5" width="3" height="8" rx="1.5"/>
+    <ellipse cx="9" cy="14.75" rx="7.5" ry="1.25"/>
+  </g>
+</svg>
