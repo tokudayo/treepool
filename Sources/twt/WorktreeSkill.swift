@@ -37,7 +37,9 @@ enum WorktreeSkill {
     ```
 
     `new` uses configured `baseBranch`; pass `--from` when it is empty or another ref is required.
-    Use `switch` with an unqualified name for an existing local or configured-remote branch.
+    Pass `--slot <name-or-path>` to either command when a specific clean, detached slot is
+    required; otherwise Treepool chooses the oldest idle slot. Use `switch` with an unqualified
+    name for an existing local or configured-remote branch.
     Treepool does not fetch; fetch only when network changes are in scope. Use returned `data.path`
     for all work, setup, and verification. Keep concurrent tasks separate and do not edit the
     primary checkout after assignment. If capacity is exhausted, report `twt list --json`; never

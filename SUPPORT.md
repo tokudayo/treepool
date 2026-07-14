@@ -1,6 +1,6 @@
 # Support policy
 
-Treepool v0.1.0 supports macOS 14 or newer on Apple Silicon and Linux on x86_64 or
+Treepool v0.1.1 supports macOS 14 or newer on Apple Silicon and Linux on x86_64 or
 ARM64 with Git 2.34 or newer. The downloadable Linux CLI is statically linked.
 The macOS menu app is source-built and ad-hoc signed; it is not a release artifact.
 

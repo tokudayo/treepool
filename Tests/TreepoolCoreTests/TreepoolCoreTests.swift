@@ -30,6 +30,36 @@ struct TreepoolCoreTests {
     }
 
     @Test
+    func testExplicitSlotSelection() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let context = try fixture.manager.initialize(at: fixture.repository, slotCount: 2)
+        let selected = try fixture.manager.createBranch(
+            "feature/selected", from: "main", in: context, slot: "tree-2"
+        )
+        #expect(selected.name == "tree-2")
+
+        try fixture.run("git", ["branch", "feature/existing"], at: fixture.repository)
+        let switched = try fixture.manager.switchBranch(
+            "feature/existing", in: context, slot: "tree-1"
+        )
+        #expect(switched.name == "tree-1")
+    }
+
+    @Test
+    func explicitSlotMustBeIdle() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let context = try fixture.manager.initialize(at: fixture.repository, slotCount: 2)
+        let active = try fixture.manager.createBranch(
+            "feature/active", from: "main", in: context, slot: "tree-2"
+        )
+        #expect(throws: TreepoolError.self) {
+            try fixture.manager.createBranch(
+                "feature/another", from: "main", in: context, slot: active.name
+            )
+        }
+    }
+
+    @Test
     func testDirtySlotCannotBeReleased() throws {
         let fixture = try Fixture(); defer { fixture.cleanup() }
         let context = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)

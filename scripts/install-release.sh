@@ -25,7 +25,7 @@ VERSION="${VERSION#v}"
 
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) platform="macos-arm64" ;;
-  Darwin-x86_64) echo "Treepool v0.1.0 does not support macOS Intel." >&2; exit 2 ;;
+  Darwin-x86_64) echo "Treepool v0.1.1 does not support macOS Intel." >&2; exit 2 ;;
   Linux-x86_64) platform="linux-x86_64" ;;
   Linux-aarch64|Linux-arm64) platform="linux-aarch64" ;;
   *) echo "Unsupported platform: $(uname -s) $(uname -m)" >&2; exit 2 ;;

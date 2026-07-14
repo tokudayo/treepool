@@ -180,13 +180,14 @@ public final class TreepoolManager: Sendable {
     public func createBranch(
         _ branch: String,
         from: String,
-        in context: RepositoryContext
+        in context: RepositoryContext,
+        slot requestedSlot: String? = nil
     ) throws -> WorktreeInfo {
         let lock = try acquireLock(context)
         defer { _ = lock }
         try validateBranchName(branch, context)
         var state = try loadState(context)
-        let slot = try selectIdleSlot(context, state)
+        let slot = try selectIdleSlot(context, state, requestedSlot: requestedSlot)
         let baseRef = try resolveRef(from, in: context)
         try git(["switch", "-c", branch, baseRef], at: URL(fileURLWithPath: slot.path))
         state.slots[slot.name, default: SlotState()].lastUsed = Date()
@@ -194,11 +195,15 @@ public final class TreepoolManager: Sendable {
         return try info(forPath: slot.path, context: context, state: state)
     }
 
-    public func switchBranch(_ branch: String, in context: RepositoryContext) throws -> WorktreeInfo {
+    public func switchBranch(
+        _ branch: String,
+        in context: RepositoryContext,
+        slot requestedSlot: String? = nil
+    ) throws -> WorktreeInfo {
         let lock = try acquireLock(context)
         defer { _ = lock }
         var state = try loadState(context)
-        let slot = try selectIdleSlot(context, state)
+        let slot = try selectIdleSlot(context, state, requestedSlot: requestedSlot)
         let slotURL = URL(fileURLWithPath: slot.path)
 
         if refExists("refs/heads/\(branch)", context: context) {
@@ -377,15 +382,26 @@ public final class TreepoolManager: Sendable {
 
     private func selectIdleSlot(
         _ context: RepositoryContext,
-        _ state: RuntimeState
+        _ state: RuntimeState,
+        requestedSlot: String? = nil
     ) throws -> WorktreeInfo {
         let slots = try rawWorktrees(in: context).compactMap { raw -> WorktreeInfo? in
             guard slotName(for: URL(fileURLWithPath: raw.path), context: context) != nil else {
                 return nil
             }
             return try makeInfo(raw: raw, context: context, state: state)
-        }.filter { $0.detached && $0.clean }
-        guard let slot = slots.min(by: {
+        }
+        if let requestedSlot {
+            let slot = try resolve(requestedSlot, from: slots)
+            guard slot.exists, slot.detached, slot.clean else {
+                throw TreepoolError.unsafe(
+                    "Requested slot \(slot.name) is not clean and detached."
+                )
+            }
+            return slot
+        }
+        let idleSlots = slots.filter { $0.detached && $0.clean }
+        guard let slot = idleSlots.min(by: {
             ($0.lastUsed ?? .distantPast) < ($1.lastUsed ?? .distantPast)
         }) else { throw TreepoolError.noAvailableSlot }
         return slot

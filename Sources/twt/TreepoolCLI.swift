@@ -202,7 +202,7 @@ struct Repair: ParsableCommand {
 
 struct New: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Create a branch in the oldest idle slot."
+        abstract: "Create a branch in an idle slot."
     )
 
     @Argument(help: "New branch name.")
@@ -210,6 +210,9 @@ struct New: ParsableCommand {
 
     @Option(name: .long, help: "Ref from which to create the branch. Defaults to baseBranch.")
     var from: String?
+
+    @Option(name: .long, help: "Slot name or path to use. Defaults to the oldest idle slot.")
+    var slot: String?
 
     @Flag(name: .long, help: "Emit machine-readable JSON.")
     var json = false
@@ -224,9 +227,11 @@ struct New: ParsableCommand {
                     "baseBranch is empty; pass '--from REF' to 'twt new'"
                 )
             }
-            let slot = try CLI.manager.createBranch(branch, from: base, in: context)
-            if json { try CLI.outputJSON(slot, command: "new") }
-            else { CLI.printSlot(slot) }
+            let selectedSlot = try CLI.manager.createBranch(
+                branch, from: base, in: context, slot: slot
+            )
+            if json { try CLI.outputJSON(selectedSlot, command: "new") }
+            else { CLI.printSlot(selectedSlot) }
         }
     }
 }
@@ -240,14 +245,19 @@ struct SwitchBranch: ParsableCommand {
     @Argument(help: "Local or remote branch name.")
     var branch: String
 
+    @Option(name: .long, help: "Slot name or path to use. Defaults to the oldest idle slot.")
+    var slot: String?
+
     @Flag(name: .long, help: "Emit machine-readable JSON.")
     var json = false
 
     func run() throws {
         try CLI.run(json: json, command: "switch") {
-            let slot = try CLI.manager.switchBranch(branch, in: CLI.context())
-            if json { try CLI.outputJSON(slot, command: "switch") }
-            else { CLI.printSlot(slot) }
+            let selectedSlot = try CLI.manager.switchBranch(
+                branch, in: CLI.context(), slot: slot
+            )
+            if json { try CLI.outputJSON(selectedSlot, command: "switch") }
+            else { CLI.printSlot(selectedSlot) }
         }
     }
 }

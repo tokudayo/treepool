@@ -22,7 +22,7 @@ removing worktree directories.
 ## Features
 
 - Reusable, pre-warmed worktree slots for parallel work.
-- Explicit branch creation with `twt new --from REF`.
+- Explicit branch creation with `twt new --from REF --slot SLOT`.
 - Safe release: dirty worktrees are never detached, cleaned, or deleted.
 - JSON output for scripts and coding-agent workflows.
 - Optional macOS menu-bar companion for viewing configured repositories.
@@ -33,7 +33,7 @@ removing worktree directories.
 - macOS 14+ on Apple Silicon, or Linux on `x86_64`/`aarch64`
 
 Swift 6 is required only when building from source. Release Linux binaries are
-statically linked with Swift's musl SDK. macOS Intel is not supported in v0.1.0.
+statically linked with Swift's musl SDK. macOS Intel is not supported in v0.1.1.
 
 ## Installation
 
@@ -45,11 +45,11 @@ curl -fsSL https://raw.githubusercontent.com/tokudayo/treepool/main/scripts/inst
 
 The release installer verifies the archive checksum and puts `twt` in
 `~/.local/bin`. If that directory is not on `PATH`, it prints the command needed
-to add it for the current shell. Set `TREEPOOL_VERSION=0.1.0` to install a
+to add it for the current shell. Set `TREEPOOL_VERSION=0.1.1` to install a
 specific release.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tokudayo/treepool/main/scripts/install-release.sh | TREEPOOL_VERSION=0.1.0 bash
+curl -fsSL https://raw.githubusercontent.com/tokudayo/treepool/main/scripts/install-release.sh | TREEPOOL_VERSION=0.1.1 bash
 ```
 
 To build, test, and install from a checkout:
@@ -61,7 +61,7 @@ scripts/install.sh
 ```
 
 The source installer also installs the optional, ad-hoc-signed `Treepool.app`
-menu-bar companion in `~/Applications`. The app is source-only in v0.1.0 and is not
+menu-bar companion in `~/Applications`. The app is source-only in v0.1.1 and is not
 included in release downloads.
 
 Uninstall binaries and installed agent guidance without touching repository
@@ -77,7 +77,7 @@ From a repository's primary checkout:
 
 ```sh
 twt init --slots 4
-twt new toku/my-feature --from main
+twt new toku/my-feature --from main --slot tree-2
 ```
 
 `init` writes `.twt.json` and creates detached sibling slots:
@@ -108,13 +108,15 @@ branch. Treepool never deletes branches.
 | `twt init [--slots N]` | Write `.twt.json` and create the warm worktree pool. |
 | `twt setup [--dry-run]` | Create missing slots from an existing committed `.twt.json`. |
 | `twt repair [--dry-run]` | Recreate missing configured slots after clearing only their stale registrations. |
-| `twt new BRANCH [--from REF]` | Create a branch from `REF` or the configured base branch. |
-| `twt switch BRANCH` | Assign an existing local or `origin` branch to an idle slot. |
+| `twt new BRANCH [--from REF] [--slot SLOT]` | Create a branch from `REF` or the configured base branch. |
+| `twt switch BRANCH [--slot SLOT]` | Assign an existing local or `origin` branch to an idle slot. |
 | `twt list` | Show branches, cleanliness, state, and paths. |
 | `twt release [QUERY]` | Detach a clean assigned slot while preserving its branch. |
 | `twt uninstall` | Remove Treepool and installed agent guidance while preserving repository state. |
 
-`QUERY` accepts an exact or unambiguous partial slot name, branch, or path. With
+`--slot` accepts an exact or unambiguous partial slot name or path and requires
+that slot to be clean and detached. Without it, `new` and `switch` choose the
+oldest idle slot. `QUERY` accepts an exact or unambiguous partial slot name, branch, or path. With
 no query, `release` must run from an assigned Treepool pool slot.
 
 All lifecycle and list commands accept `--json`. Successful responses use a

@@ -2,7 +2,11 @@
 
 All notable changes to Treepool are documented here.
 
-## 0.1.0 - Unreleased
+## 0.1.1 - 2026-07-14
+
+- Add `--slot` to `twt new` and `twt switch` for explicit clean, detached slot selection.
+
+## 0.1.0
 
 - Safe, reusable Git worktree pool lifecycle.
 - Committed policy provisioning with `twt setup`.
