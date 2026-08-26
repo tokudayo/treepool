@@ -4,12 +4,26 @@ All notable changes to Treepool are documented here.
 
 ## Unreleased
 
+## 0.1.3 - 2026-08-26
+
+### Added
+
+- Add `.twt.json` `hooks.postAssign` and `hooks.preRelease` command arrays for slot lifecycle automation.
+
 ## 0.1.2 - 2026-08-26
 
-- Add optional `.twt.json` `copyPatterns` globs to mirror matching files from the
-  primary checkout into slots assigned by `twt new` and `twt switch`.
+### Added
+
+- Add optional `.twt.json` `copyPatterns` globs to mirror matching files from the primary checkout into slots assigned by `twt new` and `twt switch`.
 - Add warnings for `copyPatterns` entries that match no files.
-- Always overwrite matching files in assigned slots (no overwrite toggle).
+
+### Changed
+
+- Always overwrite matching files in assigned slots instead of exposing an overwrite toggle.
+
+### Documentation
+
+- Restructure the README Configuration section into a table that lists every supported `.twt.json` option and its default, constraints, and behavior.
 
 ## 0.1.1 - 2026-07-14
 

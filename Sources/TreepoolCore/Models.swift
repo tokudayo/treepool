@@ -1,6 +1,26 @@
 import Foundation
 
 public struct TreepoolConfig: Codable, Sendable {
+    public struct Hooks: Codable, Sendable {
+        public var postAssign: [String]
+        public var preRelease: [String]
+
+        private enum CodingKeys: String, CodingKey {
+            case postAssign, preRelease
+        }
+
+        public init(postAssign: [String] = [], preRelease: [String] = []) {
+            self.postAssign = postAssign
+            self.preRelease = preRelease
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            postAssign = try container.decodeIfPresent([String].self, forKey: .postAssign) ?? []
+            preRelease = try container.decodeIfPresent([String].self, forKey: .preRelease) ?? []
+        }
+    }
+
     public struct Pool: Codable, Sendable {
         public var size: Int
         public var root: String
@@ -18,9 +38,10 @@ public struct TreepoolConfig: Codable, Sendable {
     public var remote: String
     public var pool: Pool
     public var copyPatterns: [String]
+    public var hooks: Hooks
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, baseBranch, remote, pool, copyPatterns
+        case schemaVersion, baseBranch, remote, pool, copyPatterns, hooks
     }
 
     public init(
@@ -28,13 +49,15 @@ public struct TreepoolConfig: Codable, Sendable {
         baseBranch: String = "",
         remote: String = "origin",
         pool: Pool,
-        copyPatterns: [String] = []
+        copyPatterns: [String] = [],
+        hooks: Hooks = .init()
     ) {
         self.schemaVersion = schemaVersion
         self.baseBranch = baseBranch
         self.remote = remote
         self.pool = pool
         self.copyPatterns = copyPatterns
+        self.hooks = hooks
     }
 
     public init(from decoder: Decoder) throws {
@@ -44,6 +67,7 @@ public struct TreepoolConfig: Codable, Sendable {
         remote = try container.decode(String.self, forKey: .remote)
         pool = try container.decode(Pool.self, forKey: .pool)
         copyPatterns = try container.decodeIfPresent([String].self, forKey: .copyPatterns) ?? []
+        hooks = try container.decodeIfPresent(Hooks.self, forKey: .hooks) ?? .init()
     }
 }
 

@@ -43,6 +43,9 @@ enum WorktreeSkill {
     If `.twt.json` configures `copyPatterns`, `new` and `switch` copy matching files from the
     primary checkout into the assigned slot at the same relative paths. Report warning messages
     from command output, including patterns that matched no files.
+    If `.twt.json` configures `hooks.postAssign`, Treepool runs those commands from the assigned
+    slot before returning success. Report hook failures and do not continue work after a failed
+    allocation command.
     Treepool does not fetch; fetch only when network changes are in scope. Use returned `data.path`
     for all work, setup, and verification. Keep concurrent tasks separate and do not edit the
     primary checkout after assignment. If capacity is exhausted, report `twt list --json`; never
@@ -59,8 +62,9 @@ enum WorktreeSkill {
     ```
 
     Release refuses tracked changes or non-ignored untracked files, detaches the slot, and
-    preserves the branch. Never alter work merely to make release succeed. Do not bypass a
-    Treepool operation lock.
+    preserves the branch. If `.twt.json` configures `hooks.preRelease`, Treepool runs those commands
+    from the slot before the clean-worktree check and detach. Never alter work merely to make release
+    succeed. Do not bypass a Treepool operation lock.
 
     Use `twt config --<harness> --remove` to remove one installed skill, or `twt uninstall` to
     remove Treepool and its unmodified skills. Neither changes repository worktrees or configuration.

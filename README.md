@@ -142,7 +142,16 @@ operation locks live in the repository's common `.git/twt/` directory.
   "copyPatterns": [
     ".env.local",
     "config/local/**/*.json"
-  ]
+  ],
+  "hooks": {
+    "postAssign": [
+      "mise install",
+      "npm install"
+    ],
+    "preRelease": [
+      "swift test"
+    ]
+  }
 }
 ```
 
@@ -158,10 +167,16 @@ Run your repository's usual setup commands in each assigned slot as needed.
 | `pool.root` | string | `../<repo>.worktrees` from `twt init` | Directory containing managed slots. Relative paths are resolved from the primary checkout. Must be outside the primary checkout. |
 | `pool.pattern` | string | `"tree-{index}"` | Slot directory name pattern. Must contain exactly one `{index}` and produce unique single-component names. |
 | `copyPatterns` | string array | `[]` | Repository-relative glob patterns copied from the primary checkout into slots assigned by `twt new` and `twt switch`. Supports `*`, `?`, and `**`. Patterns must not be absolute, contain empty path components, contain `..`, or target `.git` metadata. |
+| `hooks.postAssign` | string array | `[]` | Shell commands run from the assigned slot after `twt new` or `twt switch` checks out the branch and applies `copyPatterns`. Commands run in order; the first non-zero exit stops the command. |
+| `hooks.preRelease` | string array | `[]` | Shell commands run from the assigned slot before `twt release` detaches it. Commands run in order; the first non-zero exit stops release and leaves the slot active. |
 
 When `copyPatterns` is set, matching files are copied to the same relative paths
 in the assigned slot. Existing files at those paths are replaced. If a pattern
 matches no files, Treepool reports a warning but still assigns the slot.
+
+Hooks run with `/bin/sh -c` from the assigned slot root. `preRelease` hooks run
+before the clean-worktree check, so they may update generated files or fail the
+release before Treepool decides whether the slot can be detached.
 
 After cloning a repository that already contains `.twt.json`, run `twt setup`.
 After editing pool size or paths, preview with `twt setup --dry-run`, then run

@@ -207,6 +207,7 @@ public final class TreepoolManager: Sendable {
         )
         state.slots[slot.name, default: SlotState()].lastUsed = Date()
         try saveState(state, context)
+        try runHooks(context.config.hooks.postAssign, name: "postAssign", at: slotURL)
         let assigned = try info(forPath: slot.path, context: context, state: state)
         return SlotAssignmentResult(slot: assigned, warnings: warnings)
     }
@@ -247,6 +248,7 @@ public final class TreepoolManager: Sendable {
         )
         state.slots[slot.name, default: SlotState()].lastUsed = Date()
         try saveState(state, context)
+        try runHooks(context.config.hooks.postAssign, name: "postAssign", at: slotURL)
         let assigned = try info(forPath: slot.path, context: context, state: state)
         return SlotAssignmentResult(slot: assigned, warnings: warnings)
     }
@@ -255,13 +257,16 @@ public final class TreepoolManager: Sendable {
         let lock = try acquireLock(context)
         defer { _ = lock }
         let slot = try resolve(query, from: try list(in: context).filter(\.isPoolSlot))
-        guard slot.clean else {
-            throw TreepoolError.unsafe("Refusing to release \(slot.name): the worktree has uncommitted changes.")
-        }
         guard !slot.detached else {
             throw TreepoolError.unsafe("\(slot.name) is already idle.")
         }
-        try git(["switch", "--detach"], at: URL(fileURLWithPath: slot.path))
+        let slotURL = URL(fileURLWithPath: slot.path)
+        try runHooks(context.config.hooks.preRelease, name: "preRelease", at: slotURL)
+        let afterHooks = try info(forPath: slot.path, context: context, state: try loadState(context))
+        guard afterHooks.clean else {
+            throw TreepoolError.unsafe("Refusing to release \(slot.name): the worktree has uncommitted changes.")
+        }
+        try git(["switch", "--detach"], at: slotURL)
         var state = try loadState(context)
         state.slots[slot.name, default: SlotState()].lastUsed = Date()
         try saveState(state, context)
@@ -508,6 +513,8 @@ public final class TreepoolManager: Sendable {
             throw TreepoolError.invalidConfig("pool.pattern must produce unique single-component slot names")
         }
         _ = try normalizedCopyPatterns(config.copyPatterns)
+        try validateHooks(config.hooks.postAssign, name: "postAssign")
+        try validateHooks(config.hooks.preRelease, name: "preRelease")
         let context = RepositoryContext(
             mainRoot: mainRoot,
             commonGitDirectory: mainRoot.appendingPathComponent(".git"),
@@ -517,6 +524,30 @@ public final class TreepoolManager: Sendable {
         let main = normalizedPath(mainRoot.path)
         guard root != main, !isDescendant(root, of: main) else {
             throw TreepoolError.invalidConfig("pool.root must be outside the primary checkout")
+        }
+    }
+
+    private func validateHooks(_ commands: [String], name: String) throws {
+        for command in commands where command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw TreepoolError.invalidConfig("hooks.\(name) entries must not be empty")
+        }
+    }
+
+    private func runHooks(_ commands: [String], name: String, at directory: URL) throws {
+        for command in commands {
+            let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+            let result = try ProcessRunner.run(
+                "/bin/sh",
+                ["-c", trimmed],
+                directory: directory,
+                streamOutput: true,
+                allowFailure: true
+            )
+            guard result.status == 0 else {
+                let output = [result.stderr, result.stdout].filter { !$0.isEmpty }.joined(separator: "\n")
+                let suffix = output.isEmpty ? "" : ": \(output)"
+                throw TreepoolError.unsafe("hooks.\(name) command failed (exit \(result.status)): \(trimmed)\(suffix)")
+            }
         }
     }
 

@@ -13,9 +13,35 @@ public enum ProcessRunner {
         _ arguments: [String],
         directory: URL? = nil,
         environment: [String: String]? = nil,
+        streamOutput: Bool = false,
         allowFailure: Bool = false
     ) throws -> CommandResult {
         let process = Process()
+        process.executableURL = executable.hasPrefix("/")
+            ? URL(fileURLWithPath: executable)
+            : URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = executable.hasPrefix("/") ? arguments : [executable] + arguments
+        process.currentDirectoryURL = directory
+        if let environment {
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+        }
+
+        if streamOutput {
+            process.standardOutput = FileHandle.standardError
+            process.standardError = FileHandle.standardError
+            do {
+                try process.run()
+            } catch {
+                throw TreepoolError.git("\(executable): \(error.localizedDescription)")
+            }
+            process.waitUntilExit()
+            let result = CommandResult(stdout: "", stderr: "", status: process.terminationStatus)
+            if !allowFailure && result.status != 0 {
+                throw TreepoolError.git("\(executable) exited with status \(result.status)")
+            }
+            return result
+        }
+
         let temporary = FileManager.default.temporaryDirectory
             .appendingPathComponent("twt-process-\(UUID().uuidString)")
         let stdoutURL = temporary.appendingPathExtension("stdout")
@@ -32,14 +58,6 @@ public enum ProcessRunner {
             try? stderr.close()
             try? FileManager.default.removeItem(at: stdoutURL)
             try? FileManager.default.removeItem(at: stderrURL)
-        }
-        process.executableURL = executable.hasPrefix("/")
-            ? URL(fileURLWithPath: executable)
-            : URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = executable.hasPrefix("/") ? arguments : [executable] + arguments
-        process.currentDirectoryURL = directory
-        if let environment {
-            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
         }
         process.standardOutput = stdout
         process.standardError = stderr

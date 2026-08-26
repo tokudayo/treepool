@@ -152,6 +152,8 @@ struct TreepoolCoreTests {
         let config = try fixture.manager.context(at: fixture.repository).config
         #expect(config.baseBranch == "")
         #expect(config.copyPatterns.isEmpty)
+        #expect(config.hooks.postAssign.isEmpty)
+        #expect(config.hooks.preRelease.isEmpty)
     }
 
     @Test
@@ -245,6 +247,78 @@ struct TreepoolCoreTests {
         let readme = URL(fileURLWithPath: result.slot.path).appendingPathComponent("README.md")
         #expect(try String(contentsOf: readme, encoding: .utf8) == "updated in primary\n")
         #expect(result.warnings.isEmpty)
+    }
+
+    @Test
+    func testPostAssignHookRunsInAssignedSlotAfterCopies() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        _ = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
+        try Data("TOKEN=abc\n".utf8).write(
+            to: fixture.repository.appendingPathComponent(".env.local")
+        )
+        try fixture.writeConfig(.init(
+            baseBranch: "main",
+            pool: .init(size: 1, root: "../sample.worktrees"),
+            copyPatterns: [".env.local"],
+            hooks: .init(postAssign: ["test -f .env.local && pwd > hook.cwd"])
+        ))
+
+        let context = try fixture.manager.context(at: fixture.repository)
+        let active = try fixture.manager.createBranch("feature/post-assign-hook", from: "main", in: context)
+        let slotRoot = URL(fileURLWithPath: active.path)
+
+        #expect(try String(contentsOf: slotRoot.appendingPathComponent("hook.cwd"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == slotRoot.path)
+    }
+
+    @Test
+    func testPreReleaseHookRunsBeforeDetach() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        _ = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
+        try fixture.writeConfig(.init(
+            baseBranch: "main",
+            pool: .init(size: 1, root: "../sample.worktrees"),
+            hooks: .init(preRelease: ["git symbolic-ref --short HEAD > ../pre-release-branch"])
+        ))
+
+        let context = try fixture.manager.context(at: fixture.repository)
+        let active = try fixture.manager.createBranch("feature/pre-release-hook", from: "main", in: context)
+        let released = try fixture.manager.release(active.name, in: context)
+
+        #expect(released.detached)
+        #expect(try String(
+            contentsOf: URL(fileURLWithPath: active.path).deletingLastPathComponent()
+                .appendingPathComponent("pre-release-branch"),
+            encoding: .utf8
+        ).trimmingCharacters(in: .whitespacesAndNewlines) == "feature/pre-release-hook")
+    }
+
+    @Test
+    func testHookFailureStopsLifecycleOperation() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        _ = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
+        try fixture.writeConfig(.init(
+            baseBranch: "main",
+            pool: .init(size: 1, root: "../sample.worktrees"),
+            hooks: .init(preRelease: ["printf hook-failed >&2; exit 7"])
+        ))
+
+        let context = try fixture.manager.context(at: fixture.repository)
+        let active = try fixture.manager.createBranch("feature/failing-hook", from: "main", in: context)
+        #expect(throws: TreepoolError.self) { try fixture.manager.release(active.name, in: context) }
+        #expect(try fixture.manager.list(in: context).first(where: { $0.name == active.name })?.branch == active.branch)
+    }
+
+    @Test
+    func testEmptyHookCommandsAreRejected() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        try fixture.writeConfig(.init(
+            baseBranch: "main",
+            pool: .init(size: 1, root: "../sample.worktrees"),
+            hooks: .init(postAssign: [" "])
+        ))
+
+        #expect(throws: TreepoolError.self) { try fixture.manager.context(at: fixture.repository) }
     }
 
     @Test
