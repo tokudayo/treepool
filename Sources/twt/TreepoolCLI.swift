@@ -76,10 +76,13 @@ enum CLI {
         }
     }
 
-    static func printSlot(_ slot: WorktreeInfo) {
+    static func printSlot(_ slot: WorktreeInfo, warnings: [String] = []) {
         print("✓ \(slot.name) ready")
         print("  Branch: \(slot.branch ?? "(detached HEAD)")")
         print("  Path:   \(slot.path)")
+        for warning in warnings {
+            print("  Warning: \(warning)")
+        }
     }
 
     static func printList(_ items: [WorktreeInfo]) {
@@ -227,11 +230,11 @@ struct New: ParsableCommand {
                     "baseBranch is empty; pass '--from REF' to 'twt new'"
                 )
             }
-            let selectedSlot = try CLI.manager.createBranch(
+            let selectedSlot = try CLI.manager.createBranchWithWarnings(
                 branch, from: base, in: context, slot: slot
             )
-            if json { try CLI.outputJSON(selectedSlot, command: "new") }
-            else { CLI.printSlot(selectedSlot) }
+            if json { try CLI.outputJSON(selectedSlot.slot, command: "new", warnings: selectedSlot.warnings) }
+            else { CLI.printSlot(selectedSlot.slot, warnings: selectedSlot.warnings) }
         }
     }
 }
@@ -253,11 +256,11 @@ struct SwitchBranch: ParsableCommand {
 
     func run() throws {
         try CLI.run(json: json, command: "switch") {
-            let selectedSlot = try CLI.manager.switchBranch(
+            let selectedSlot = try CLI.manager.switchBranchWithWarnings(
                 branch, in: CLI.context(), slot: slot
             )
-            if json { try CLI.outputJSON(selectedSlot, command: "switch") }
-            else { CLI.printSlot(selectedSlot) }
+            if json { try CLI.outputJSON(selectedSlot.slot, command: "switch", warnings: selectedSlot.warnings) }
+            else { CLI.printSlot(selectedSlot.slot, warnings: selectedSlot.warnings) }
         }
     }
 }

@@ -183,16 +183,32 @@ public final class TreepoolManager: Sendable {
         in context: RepositoryContext,
         slot requestedSlot: String? = nil
     ) throws -> WorktreeInfo {
+        try createBranchWithWarnings(branch, from: from, in: context, slot: requestedSlot).slot
+    }
+
+    public func createBranchWithWarnings(
+        _ branch: String,
+        from: String,
+        in context: RepositoryContext,
+        slot requestedSlot: String? = nil
+    ) throws -> SlotAssignmentResult {
         let lock = try acquireLock(context)
         defer { _ = lock }
         try validateBranchName(branch, context)
         var state = try loadState(context)
         let slot = try selectIdleSlot(context, state, requestedSlot: requestedSlot)
+        let slotURL = URL(fileURLWithPath: slot.path)
         let baseRef = try resolveRef(from, in: context)
-        try git(["switch", "-c", branch, baseRef], at: URL(fileURLWithPath: slot.path))
+        try git(["switch", "-c", branch, baseRef], at: slotURL)
+        let warnings = try copyConfiguredFiles(
+            from: context.mainRoot,
+            to: slotURL,
+            patterns: context.config.copyPatterns
+        )
         state.slots[slot.name, default: SlotState()].lastUsed = Date()
         try saveState(state, context)
-        return try info(forPath: slot.path, context: context, state: state)
+        let assigned = try info(forPath: slot.path, context: context, state: state)
+        return SlotAssignmentResult(slot: assigned, warnings: warnings)
     }
 
     public func switchBranch(
@@ -200,6 +216,14 @@ public final class TreepoolManager: Sendable {
         in context: RepositoryContext,
         slot requestedSlot: String? = nil
     ) throws -> WorktreeInfo {
+        try switchBranchWithWarnings(branch, in: context, slot: requestedSlot).slot
+    }
+
+    public func switchBranchWithWarnings(
+        _ branch: String,
+        in context: RepositoryContext,
+        slot requestedSlot: String? = nil
+    ) throws -> SlotAssignmentResult {
         let lock = try acquireLock(context)
         defer { _ = lock }
         var state = try loadState(context)
@@ -216,9 +240,15 @@ public final class TreepoolManager: Sendable {
         } else {
             throw TreepoolError.git("branch '\(branch)' does not exist locally or on \(context.config.remote)")
         }
+        let warnings = try copyConfiguredFiles(
+            from: context.mainRoot,
+            to: slotURL,
+            patterns: context.config.copyPatterns
+        )
         state.slots[slot.name, default: SlotState()].lastUsed = Date()
         try saveState(state, context)
-        return try info(forPath: slot.path, context: context, state: state)
+        let assigned = try info(forPath: slot.path, context: context, state: state)
+        return SlotAssignmentResult(slot: assigned, warnings: warnings)
     }
 
     public func release(_ query: String, in context: RepositoryContext) throws -> WorktreeInfo {
@@ -477,6 +507,7 @@ public final class TreepoolManager: Sendable {
               names.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." && !$0.contains("/") }) else {
             throw TreepoolError.invalidConfig("pool.pattern must produce unique single-component slot names")
         }
+        _ = try normalizedCopyPatterns(config.copyPatterns)
         let context = RepositoryContext(
             mainRoot: mainRoot,
             commonGitDirectory: mainRoot.appendingPathComponent(".git"),
@@ -486,6 +517,165 @@ public final class TreepoolManager: Sendable {
         let main = normalizedPath(mainRoot.path)
         guard root != main, !isDescendant(root, of: main) else {
             throw TreepoolError.invalidConfig("pool.root must be outside the primary checkout")
+        }
+    }
+
+    private struct CopyPatternMatcher {
+        let pattern: String
+        let regex: NSRegularExpression
+    }
+
+    private func copyConfiguredFiles(
+        from sourceRoot: URL,
+        to destinationRoot: URL,
+        patterns: [String]
+    ) throws -> [String] {
+        let normalizedPatterns = try normalizedCopyPatterns(patterns)
+        guard !normalizedPatterns.isEmpty else { return [] }
+        let matchers = try normalizedPatterns.map { pattern in
+            CopyPatternMatcher(pattern: pattern, regex: try globRegex(for: pattern))
+        }
+        let normalizedSourceRoot = sourceRoot.standardizedFileURL
+        let prefix = normalizedSourceRoot.path.hasSuffix("/")
+            ? normalizedSourceRoot.path
+            : normalizedSourceRoot.path + "/"
+
+        guard let enumerator = fileManager.enumerator(
+            at: normalizedSourceRoot,
+            includingPropertiesForKeys: [.isDirectoryKey]
+        ) else {
+            throw TreepoolError.unsafe("Could not enumerate repository files for copyPatterns.")
+        }
+
+        var matchesByPattern: [String: Set<String>] = [:]
+        for pattern in normalizedPatterns {
+            matchesByPattern[pattern] = []
+        }
+
+        for case let sourceURL as URL in enumerator {
+            let standardized = sourceURL.standardizedFileURL
+            guard standardized.path.hasPrefix(prefix) else { continue }
+            let relativePath = String(standardized.path.dropFirst(prefix.count))
+            guard !relativePath.isEmpty else { continue }
+            let isGitMetadata = relativePath == ".git" || relativePath.hasPrefix(".git/")
+            let values = try standardized.resourceValues(forKeys: [.isDirectoryKey])
+            if values.isDirectory == true {
+                if isGitMetadata { enumerator.skipDescendants() }
+                continue
+            }
+            if isGitMetadata { continue }
+            let range = NSRange(relativePath.startIndex..<relativePath.endIndex, in: relativePath)
+            for matcher in matchers where matcher.regex.firstMatch(in: relativePath, range: range) != nil {
+                matchesByPattern[matcher.pattern, default: []].insert(relativePath)
+            }
+        }
+
+        var warnings: [String] = []
+        var matchedPaths: Set<String> = []
+        for pattern in normalizedPatterns {
+            let matches = matchesByPattern[pattern] ?? []
+            if matches.isEmpty {
+                warnings.append("copyPatterns pattern '\(pattern)' matched no files.")
+            }
+            matchedPaths.formUnion(matches)
+        }
+
+        for relativePath in matchedPaths.sorted() {
+            let sourceURL = normalizedSourceRoot.appendingPathComponent(relativePath)
+            let destinationURL = destinationRoot.appendingPathComponent(relativePath)
+            let parent = destinationURL.deletingLastPathComponent()
+            do {
+                try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
+                let exists = fileManager.fileExists(atPath: destinationURL.path)
+                    || (try? fileManager.destinationOfSymbolicLink(atPath: destinationURL.path)) != nil
+                if exists {
+                    try fileManager.removeItem(at: destinationURL)
+                }
+                try fileManager.copyItem(at: sourceURL, to: destinationURL)
+            } catch {
+                throw TreepoolError.unsafe(
+                    "Failed to copy '\(relativePath)' into \(destinationRoot.path): \(error.localizedDescription)"
+                )
+            }
+        }
+        return warnings
+    }
+
+    private func normalizedCopyPatterns(_ patterns: [String]) throws -> [String] {
+        var seen: Set<String> = []
+        var normalized: [String] = []
+        for pattern in patterns {
+            let value = try normalizedCopyPattern(pattern)
+            if seen.insert(value).inserted {
+                normalized.append(value)
+            }
+        }
+        return normalized
+    }
+
+    private func normalizedCopyPattern(_ pattern: String) throws -> String {
+        let trimmed = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw TreepoolError.invalidConfig("copyPatterns entries must not be empty")
+        }
+        var normalized = trimmed
+        while normalized.hasPrefix("./") {
+            normalized.removeFirst(2)
+        }
+        guard !normalized.isEmpty else {
+            throw TreepoolError.invalidConfig("copyPatterns entries must not be empty")
+        }
+        guard !normalized.hasPrefix("/") else {
+            throw TreepoolError.invalidConfig("copyPatterns must be repository-relative paths")
+        }
+        let components = normalized.split(separator: "/", omittingEmptySubsequences: false)
+        guard !components.contains(where: \.isEmpty) else {
+            throw TreepoolError.invalidConfig("copyPatterns must not contain empty path components")
+        }
+        guard !components.contains(where: { $0 == ".." }) else {
+            throw TreepoolError.invalidConfig("copyPatterns must not escape the repository root")
+        }
+        guard !components.contains(where: { $0 == ".git" }) else {
+            throw TreepoolError.invalidConfig("copyPatterns must not target .git metadata")
+        }
+        return normalized
+    }
+
+    private func globRegex(for pattern: String) throws -> NSRegularExpression {
+        let regexMetaCharacters: Set<Character> = ["\\", ".", "+", "(", ")", "|", "^", "$", "[", "]", "{", "}"]
+        var regex = "^"
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if character == "*" {
+                let next = pattern.index(after: index)
+                if next < pattern.endIndex, pattern[next] == "*" {
+                    let afterNext = pattern.index(after: next)
+                    if afterNext < pattern.endIndex, pattern[afterNext] == "/" {
+                        regex += "(?:.*/)?"
+                        index = pattern.index(after: afterNext)
+                    } else {
+                        regex += ".*"
+                        index = afterNext
+                    }
+                } else {
+                    regex += "[^/]*"
+                    index = next
+                }
+            } else if character == "?" {
+                regex += "[^/]"
+                index = pattern.index(after: index)
+            } else {
+                if regexMetaCharacters.contains(character) { regex.append("\\") }
+                regex.append(character)
+                index = pattern.index(after: index)
+            }
+        }
+        regex += "$"
+        do {
+            return try NSRegularExpression(pattern: regex)
+        } catch {
+            throw TreepoolError.invalidConfig("copyPatterns contains an invalid pattern '\(pattern)'")
         }
     }
 

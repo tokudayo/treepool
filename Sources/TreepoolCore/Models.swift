@@ -17,21 +17,24 @@ public struct TreepoolConfig: Codable, Sendable {
     public var baseBranch: String
     public var remote: String
     public var pool: Pool
+    public var copyPatterns: [String]
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, baseBranch, remote, pool
+        case schemaVersion, baseBranch, remote, pool, copyPatterns
     }
 
     public init(
         schemaVersion: Int = 1,
         baseBranch: String = "",
         remote: String = "origin",
-        pool: Pool
+        pool: Pool,
+        copyPatterns: [String] = []
     ) {
         self.schemaVersion = schemaVersion
         self.baseBranch = baseBranch
         self.remote = remote
         self.pool = pool
+        self.copyPatterns = copyPatterns
     }
 
     public init(from decoder: Decoder) throws {
@@ -40,6 +43,17 @@ public struct TreepoolConfig: Codable, Sendable {
         baseBranch = try container.decodeIfPresent(String.self, forKey: .baseBranch) ?? ""
         remote = try container.decode(String.self, forKey: .remote)
         pool = try container.decode(Pool.self, forKey: .pool)
+        copyPatterns = try container.decodeIfPresent([String].self, forKey: .copyPatterns) ?? []
+    }
+}
+
+public struct SlotAssignmentResult: Sendable {
+    public let slot: WorktreeInfo
+    public let warnings: [String]
+
+    public init(slot: WorktreeInfo, warnings: [String]) {
+        self.slot = slot
+        self.warnings = warnings
     }
 }
 

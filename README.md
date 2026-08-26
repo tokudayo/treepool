@@ -24,6 +24,7 @@ removing worktree directories.
 - Reusable, pre-warmed worktree slots for parallel work.
 - Explicit branch creation with `twt new --from REF --slot SLOT`.
 - Safe release: dirty worktrees are never detached, cleaned, or deleted.
+- Optional `copyPatterns` to mirror repo files into newly assigned slots.
 - JSON output for scripts and coding-agent workflows.
 - Optional macOS menu-bar companion for viewing configured repositories.
 
@@ -108,8 +109,8 @@ branch. Treepool never deletes branches.
 | `twt init [--slots N]` | Write `.twt.json` and create the warm worktree pool. |
 | `twt setup [--dry-run]` | Create missing slots from an existing committed `.twt.json`. |
 | `twt repair [--dry-run]` | Recreate missing configured slots after clearing only their stale registrations. |
-| `twt new BRANCH [--from REF] [--slot SLOT]` | Create a branch from `REF` or the configured base branch. |
-| `twt switch BRANCH [--slot SLOT]` | Assign an existing local or `origin` branch to an idle slot. |
+| `twt new BRANCH [--from REF] [--slot SLOT]` | Create a branch from `REF` or the configured base branch, then apply configured `copyPatterns`. |
+| `twt switch BRANCH [--slot SLOT]` | Assign an existing local or `origin` branch to an idle slot, then apply configured `copyPatterns`. |
 | `twt list` | Show branches, cleanliness, state, and paths. |
 | `twt release [QUERY]` | Detach a clean assigned slot while preserving its branch. |
 | `twt uninstall` | Remove Treepool and installed agent guidance while preserving repository state. |
@@ -137,7 +138,11 @@ operation locks live in the repository's common `.git/twt/` directory.
     "size": 4,
     "root": "../my-project.worktrees",
     "pattern": "tree-{index}"
-  }
+  },
+  "copyPatterns": [
+    ".env.local",
+    "config/local/**/*.json"
+  ]
 }
 ```
 
@@ -146,6 +151,14 @@ Run your repository's usual setup commands in each assigned slot as needed.
 `baseBranch` defaults to empty, so `twt new` requires `--from`. Set `baseBranch`
 to make that ref the default when `--from` is omitted. Pool setup can still
 auto-detect a bootstrap ref when `baseBranch` is empty.
+
+`copyPatterns` is optional and defaults to `[]`. When `twt new` or `twt switch`
+assigns a slot, Treepool copies matching files from the repository's primary
+checkout into the slot at the same relative paths. Patterns are repository-
+relative globs (`*`, `?`, and `**`), must not be absolute, and must not contain
+`..` or target `.git` metadata. If a pattern matches nothing, Treepool reports a
+warning. Matching files always replace existing files at the same paths in the
+assigned slot.
 
 After cloning a repository that already contains `.twt.json`, run `twt setup`.
 After editing pool size or paths, preview with `twt setup --dry-run`, then run

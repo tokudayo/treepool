@@ -149,7 +149,9 @@ struct TreepoolCoreTests {
         let fixture = try Fixture(); defer { fixture.cleanup() }
         try Data(#"{"schemaVersion":1,"remote":"origin","pool":{"size":1,"root":"..\/sample.worktrees","pattern":"tree-{index}"}}"#.utf8)
             .write(to: fixture.repository.appendingPathComponent(".twt.json"))
-        #expect(try fixture.manager.context(at: fixture.repository).config.baseBranch == "")
+        let config = try fixture.manager.context(at: fixture.repository).config
+        #expect(config.baseBranch == "")
+        #expect(config.copyPatterns.isEmpty)
     }
 
     @Test
@@ -163,6 +165,86 @@ struct TreepoolCoreTests {
         let context = try fixture.manager.context(at: fixture.repository)
         let active = try fixture.manager.createBranch("feature/explicit", from: "main", in: context)
         #expect(active.branch == "feature/explicit")
+    }
+
+    @Test
+    func testCopyPatternsAreAppliedToAssignedSlot() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        _ = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
+        try Data("TOKEN=abc\n".utf8).write(
+            to: fixture.repository.appendingPathComponent(".env.local")
+        )
+        let nested = fixture.repository.appendingPathComponent("config/local")
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try Data("{\"name\":\"sample\"}\n".utf8).write(
+            to: nested.appendingPathComponent("agent.json")
+        )
+        try fixture.writeConfig(.init(
+            baseBranch: "main",
+            pool: .init(size: 1, root: "../sample.worktrees"),
+            copyPatterns: [".env.local", "config/**/*.json"]
+        ))
+
+        let context = try fixture.manager.context(at: fixture.repository)
+        let active = try fixture.manager.createBranch("feature/copy", from: "main", in: context)
+        let slotRoot = URL(fileURLWithPath: active.path)
+        let copiedEnv = slotRoot.appendingPathComponent(".env.local")
+        let copiedConfig = slotRoot.appendingPathComponent("config/local/agent.json")
+
+        #expect(FileManager.default.fileExists(atPath: copiedEnv.path))
+        #expect(FileManager.default.fileExists(atPath: copiedConfig.path))
+        #expect(try String(contentsOf: copiedEnv, encoding: .utf8) == "TOKEN=abc\n")
+    }
+
+    @Test
+    func testCopyPatternsCannotEscapeRepositoryRoot() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        try fixture.writeConfig(.init(
+            baseBranch: "main",
+            pool: .init(size: 1, root: "../sample.worktrees"),
+            copyPatterns: ["../secrets/*"]
+        ))
+        #expect(throws: TreepoolError.self) { try fixture.manager.context(at: fixture.repository) }
+    }
+
+    @Test
+    func testCopyPatternsWarnWhenNoFilesMatch() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        _ = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
+        try fixture.writeConfig(.init(
+            baseBranch: "main",
+            pool: .init(size: 1, root: "../sample.worktrees"),
+            copyPatterns: ["missing/**/*.txt"]
+        ))
+
+        let context = try fixture.manager.context(at: fixture.repository)
+        let result = try fixture.manager.createBranchWithWarnings(
+            "feature/missing-copy", from: "main", in: context
+        )
+        #expect(result.warnings.contains("copyPatterns pattern 'missing/**/*.txt' matched no files."))
+        #expect(result.slot.branch == "feature/missing-copy")
+    }
+
+    @Test
+    func testCopyPatternsOverwriteExistingFiles() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        _ = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
+        try Data("updated in primary\n".utf8).write(
+            to: fixture.repository.appendingPathComponent("README.md")
+        )
+        try fixture.writeConfig(.init(
+            baseBranch: "main",
+            pool: .init(size: 1, root: "../sample.worktrees"),
+            copyPatterns: ["README.md"]
+        ))
+
+        let context = try fixture.manager.context(at: fixture.repository)
+        let result = try fixture.manager.createBranchWithWarnings(
+            "feature/overwrite", from: "main", in: context
+        )
+        let readme = URL(fileURLWithPath: result.slot.path).appendingPathComponent("README.md")
+        #expect(try String(contentsOf: readme, encoding: .utf8) == "updated in primary\n")
+        #expect(result.warnings.isEmpty)
     }
 
     @Test
