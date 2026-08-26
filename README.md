@@ -148,17 +148,20 @@ operation locks live in the repository's common `.git/twt/` directory.
 
 Treepool does not fetch remotes, install dependencies, or clean ignored files.
 Run your repository's usual setup commands in each assigned slot as needed.
-`baseBranch` defaults to empty, so `twt new` requires `--from`. Set `baseBranch`
-to make that ref the default when `--from` is omitted. Pool setup can still
-auto-detect a bootstrap ref when `baseBranch` is empty.
 
-`copyPatterns` is optional and defaults to `[]`. When `twt new` or `twt switch`
-assigns a slot, Treepool copies matching files from the repository's primary
-checkout into the slot at the same relative paths. Patterns are repository-
-relative globs (`*`, `?`, and `**`), must not be absolute, and must not contain
-`..` or target `.git` metadata. If a pattern matches nothing, Treepool reports a
-warning. Matching files always replace existing files at the same paths in the
-assigned slot.
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `schemaVersion` | integer | `1` | Configuration schema version. Treepool 0.1.x supports `1`. |
+| `baseBranch` | string | `""` | Default ref for `twt new` when `--from` is omitted. If empty, `twt new` requires `--from`. Pool setup can still auto-detect a bootstrap ref when this is empty. |
+| `remote` | string | `"origin"` | Remote used by `twt switch` when tracking a branch that does not exist locally. Must not be empty. Treepool does not fetch. |
+| `pool.size` | integer | `4` | Number of managed warm slots. Must be between `1` and `64`. |
+| `pool.root` | string | `../<repo>.worktrees` from `twt init` | Directory containing managed slots. Relative paths are resolved from the primary checkout. Must be outside the primary checkout. |
+| `pool.pattern` | string | `"tree-{index}"` | Slot directory name pattern. Must contain exactly one `{index}` and produce unique single-component names. |
+| `copyPatterns` | string array | `[]` | Repository-relative glob patterns copied from the primary checkout into slots assigned by `twt new` and `twt switch`. Supports `*`, `?`, and `**`. Patterns must not be absolute, contain empty path components, contain `..`, or target `.git` metadata. |
+
+When `copyPatterns` is set, matching files are copied to the same relative paths
+in the assigned slot. Existing files at those paths are replaced. If a pattern
+matches no files, Treepool reports a warning but still assigns the slot.
 
 After cloning a repository that already contains `.twt.json`, run `twt setup`.
 After editing pool size or paths, preview with `twt setup --dry-run`, then run
