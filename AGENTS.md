@@ -2,8 +2,10 @@
 
 - Swift 6 package. Run `swift test` before handoff; build the CLI with
   `swift build -c release --product twt`.
-- Treepool manages reusable Git worktree slots. Keep lifecycle actions in the CLI;
-  do not add them to the macOS menu-bar app.
+- Treepool manages reusable Git worktree slots. The CLI is the primary interface
+  for lifecycle actions; the macOS menu-bar app may expose slot release, which
+  must go through `TreepoolCore` and keep the same safety guarantees as
+  `twt release`.
 - `twt release` is non-destructive: it must refuse dirty worktrees and preserve
   the branch.
 - Agent workflow guidance is opt-in: `twt config --codex`, `--claude-code`,

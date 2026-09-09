@@ -9,7 +9,8 @@ enum WorktreeSkill {
 
     # Use Treepool Worktrees
 
-    Use `twt` for pool lifecycle changes, not raw `git worktree` commands or the menu-bar app.
+    Use `twt` for pool lifecycle changes, not raw `git worktree` commands. The macOS menu-bar
+    app can release slots with the same safety checks, but agents must use the CLI.
     Treepool does not fetch remotes or install dependencies.
 
     ## Select a slot

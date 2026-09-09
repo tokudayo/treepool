@@ -52,6 +52,7 @@ final class MenuStore: ObservableObject {
     private let defaultApplicationBundleIdentifier = "com.apple.finder"
     private var refreshGeneration = 0
     private var refreshTask: Task<Void, Never>?
+    private var stickyErrorMessage: String?
 
     init() {
         loadOpenApplications()
@@ -100,7 +101,8 @@ final class MenuStore: ObservableObject {
         guard generation == refreshGeneration else { return }
         repositories = snapshots
         repositoryFailures = failures
-        errorMessage = nil
+        errorMessage = stickyErrorMessage
+        stickyErrorMessage = nil
     }
 
     func addRepository() {
@@ -148,6 +150,45 @@ final class MenuStore: ObservableObject {
     func copyPath(_ path: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(path, forType: .string)
+    }
+
+    func canRelease(_ slot: WorktreeInfo) -> Bool {
+        slot.isPoolSlot && slot.exists && !slot.detached
+    }
+
+    func requestRelease(_ slot: WorktreeInfo, in repository: RepositorySnapshot) {
+        let alert = NSAlert()
+        alert.messageText = "Release \(slot.name)?"
+        alert.informativeText = if let branch = slot.branch {
+            "The slot detaches from '\(branch)' and returns to the pool. The branch and its commits are kept. Slots with uncommitted changes are refused."
+        } else {
+            "The slot detaches and returns to the pool. Branches and commits are kept. Slots with uncommitted changes are refused."
+        }
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Release Slot")
+        alert.addButton(withTitle: "Cancel")
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        release(slot, in: repository)
+    }
+
+    private func release(_ slot: WorktreeInfo, in repository: RepositorySnapshot) {
+        let manager = manager
+        let context = repository.context
+        let path = slot.path
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                _ = try manager.release(path, in: context)
+                await self?.finishRelease(message: nil)
+            } catch {
+                await self?.finishRelease(message: String(describing: error))
+            }
+        }
+    }
+
+    private func finishRelease(message: String?) {
+        stickyErrorMessage = message
+        refresh()
     }
 
     @discardableResult
@@ -427,7 +468,7 @@ struct MenuPopoverContent: View {
 
             if expandedRepositoryIDs.contains(repository.id) {
                 ForEach(repository.worktrees) { slot in
-                    worktreeRow(slot)
+                    worktreeRow(slot, in: repository)
                 }
             }
         }
@@ -442,7 +483,7 @@ struct MenuPopoverContent: View {
         }
     }
 
-    private func worktreeRow(_ slot: WorktreeInfo) -> some View {
+    private func worktreeRow(_ slot: WorktreeInfo, in repository: RepositorySnapshot) -> some View {
         HStack(spacing: 10) {
             Image(systemName: statusIcon(for: slot))
                 .foregroundStyle(statusColor(for: slot))
@@ -492,6 +533,12 @@ struct MenuPopoverContent: View {
                 Divider()
                 Button("Configure Apps…") {
                     isManagingOpenApplications = true
+                }
+                if store.canRelease(slot) {
+                    Divider()
+                    Button("Release Slot…", role: .destructive) {
+                        store.requestRelease(slot, in: repository)
+                    }
                 }
             } label: {
                 Image(systemName: "ellipsis")

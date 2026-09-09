@@ -4,6 +4,12 @@ All notable changes to Treepool are documented here.
 
 ## Unreleased
 
+## 0.1.4 - 2026-09-09
+
+### Added
+
+- Add a "Release Slot" action to the macOS menu-bar app that releases a clean, active pool slot through the same non-destructive `TreepoolCore` path as `twt release` (runs `hooks.preRelease`, refuses dirty worktrees, preserves the branch).
+
 ## 0.1.3 - 2026-08-26
 
 ### Added
