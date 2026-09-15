@@ -1,27 +1,13 @@
 # Treepool
 
-- Swift 6 package. Run `swift test` before handoff; build the CLI with
-  `swift build -c release --product twt`.
-- Treepool manages reusable Git worktree slots. The CLI is the primary interface
-  for lifecycle actions; the macOS menu-bar app may expose slot release, which
-  must go through `TreepoolCore` and keep the same safety guarantees as
-  `twt release`.
-- `twt release` is non-destructive: it must refuse dirty worktrees and preserve
-  the branch.
-- Agent workflow guidance is opt-in: `twt config --codex`, `--claude-code`,
-  `--opencode`, or `--pi` installs it for a user-selected harness.
-- When changing Treepool commands or workflow behavior, update the bundled skill
-  template in `Sources/twt/WorktreeSkill.swift` as part of the same change.
-- Release tags must match `VERSION`: before tagging, update `VERSION` and
-  `CHANGELOG.md`, commit them to `main`, and push `main`.
-- Keep `CHANGELOG.md` structured with an `Unreleased` section and release entries
-  grouped under `Added`, `Changed`, `Fixed`, and `Documentation` headings when
-  those categories apply. When asked for release notes or patch notes, summarize
-  from this structured changelog first.
-- Do not manually line-wrap changelog bullets or release-note bullets; keep each
-  bullet as one line so it can be copied into GitHub release notes cleanly.
-- Create releases from `main` with an annotated tag named exactly `v$(cat VERSION)`
-  (for example, `git tag -a v0.1.2 -m "Treepool 0.1.2"`). Pushing that tag triggers
-  the GitHub release workflow.
-- Do not tag a commit whose `VERSION` still names the previous release; CI validates
-  `GITHUB_REF_NAME == v$(tr -d '[:space:]' < VERSION)` and will fail on mismatch.
+- Swift 6 package; run `swift test` and `swift build -c release --product twt` before handoff.
+- Keep lifecycle actions in the CLI; menu-bar release must use `TreepoolCore` with identical safety guarantees.
+- `twt release` must refuse dirty worktrees and preserve branches.
+- Agent guidance is opt-in through `twt config --codex`, `--claude-code`, `--opencode`, or `--pi`.
+- Update `Sources/twt/WorktreeSkill.swift` whenever commands or workflow behavior change.
+- Start a release by fast-forwarding `main` from `origin/main` and creating `release/vX.Y.Z`; never develop releases on `main`.
+- Merge only validated feature work into the release branch.
+- During development, keep `VERSION` at the latest published version and changes under `CHANGELOG.md` → `Unreleased`.
+- Once finalized, bump `VERSION`, create the dated changelog section, and raise a PR from the release branch to `main`.
+- Keep changelog sections grouped under applicable `Added`, `Changed`, `Fixed`, and `Documentation` headings; never manually wrap bullets.
+- After the PR merges, push `main`, create annotated tag `v$(cat VERSION)`, and push it; tag/version mismatches fail CI.

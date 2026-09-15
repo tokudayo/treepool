@@ -4,6 +4,16 @@ All notable changes to Treepool are documented here.
 
 ## Unreleased
 
+## 0.2.0 - 2026-09-15
+
+### Added
+
+- Add `twt start` to resume an active pool branch, switch an existing local or configured-remote branch, or create a new branch without requiring callers to choose between `twt new` and `twt switch`.
+
+### Changed
+
+- Split TreepoolCore lifecycle, repository, inspection, configuration, and file-copy responsibilities, and separate the macOS menu app into focused state, application, and view components.
+
 ## 0.1.4 - 2026-09-09
 
 ### Added

@@ -81,6 +81,24 @@ public struct SlotAssignmentResult: Sendable {
     }
 }
 
+public enum SlotStartAction: String, Codable, Equatable, Sendable {
+    case resumed
+    case switched
+    case created
+}
+
+public struct SlotStartResult: Sendable {
+    public let action: SlotStartAction
+    public let slot: WorktreeInfo
+    public let warnings: [String]
+
+    public init(action: SlotStartAction, slot: WorktreeInfo, warnings: [String]) {
+        self.action = action
+        self.slot = slot
+        self.warnings = warnings
+    }
+}
+
 public struct WorktreeInfo: Codable, Sendable, Identifiable {
     public var id: String { path }
     public let name: String
