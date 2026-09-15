@@ -17,9 +17,12 @@ git -C "$REPO" commit -m initial >/dev/null
 cd "$REPO"
 "$TWT" init --slots 1 --json | grep '"ok" : true' >/dev/null
 "$TWT" setup --dry-run --json | grep '"created"' >/dev/null
-"$TWT" new smoke/branch --from main --json | grep -F '"branch" : "smoke\/branch"' >/dev/null
+"$TWT" start smoke/branch --from main --json | grep -F '"action" : "created"' >/dev/null
+"$TWT" start smoke/branch --json | grep -F '"action" : "resumed"' >/dev/null
 "$TWT" release smoke/branch --json | grep '"detached" : true' >/dev/null
 test "$(git rev-parse --verify refs/heads/smoke/branch)" != ""
+"$TWT" start smoke/branch --json | grep -F '"action" : "switched"' >/dev/null
+"$TWT" release smoke/branch --json | grep '"detached" : true' >/dev/null
 
 sed 's/"baseBranch" : ""/"baseBranch" : "main"/' .twt.json > .twt.json.tmp
 mv .twt.json.tmp .twt.json

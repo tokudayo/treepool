@@ -18,8 +18,8 @@ enum WorktreeSkill {
     1. Run `command -v twt`, `git rev-parse --show-toplevel`, and `twt list --json`. If `twt` is
        unavailable, report that it must be installed or added to `PATH`.
     2. In `data`, match the current root or task branch to a pool entry (`isPoolSlot: true`).
-       Reuse it when `exists: true` and `detached: false`. Check all entries for branch occupancy;
-       never allocate a duplicate slot or an active branch.
+       Continue in it when `exists: true` and `detached: false`. `twt start` also performs this
+       resume check; never allocate a duplicate slot or alter an active branch.
     3. If `twt list` reports `missing_config`, run `twt init` only when the user explicitly asks
        to configure the repository.
     4. If fewer entries have `isPoolSlot: true` and `exists: true` than `.twt.json`'s `pool.size`,
@@ -32,23 +32,27 @@ enum WorktreeSkill {
     Follow the repository's branch convention:
 
     ```bash
-    twt new <branch> --from <ref> --json
-    twt new <branch> --json
-    twt switch <branch> --json
+    twt start <branch> --from <ref> --json
+    twt start <branch> --json
     ```
 
-    `new` uses configured `baseBranch`; pass `--from` when it is empty or another ref is required.
-    Pass `--slot <name-or-path>` to either command when a specific clean, detached slot is
-    required; otherwise Treepool chooses the oldest idle slot. Use `switch` with an unqualified
-    name for an existing local or configured-remote branch.
-    If `.twt.json` configures `copyPatterns`, `new` and `switch` copy matching files from the
-    primary checkout into the assigned slot at the same relative paths. Report warning messages
-    from command output, including patterns that matched no files.
+    `start` resumes a branch already active in a pool slot, switches an existing local or
+    configured-remote branch into an idle slot, or creates an unknown branch. Creation uses the
+    configured `baseBranch`; pass `--from` when it is empty or another ref is required. `--from`
+    is ignored when the branch is resumed or switched. Pass `--slot <name-or-path>` when a
+    specific clean, detached slot is required; otherwise Treepool chooses the oldest idle slot.
+    A requested slot that conflicts with an already-active branch is refused. Use `new` or
+    `switch` only when the user explicitly requires that precise operation.
+    Read `data.action` (`resumed`, `switched`, or `created`) and use `data.path` for subsequent
+    work. If `.twt.json` configures `copyPatterns`, a switching or creating `start` copies
+    matching files from the primary checkout into the assigned slot at the same relative paths.
+    A resumed `start` does not copy files or rerun assignment hooks. Report warning messages from
+    command output, including patterns that matched no files.
     If `.twt.json` configures `hooks.postAssign`, Treepool runs those commands from the assigned
     slot before returning success. Report hook failures and do not continue work after a failed
     allocation command.
     Treepool does not fetch; fetch only when network changes are in scope. Use returned `data.path`
-    for all work, setup, and verification. Keep concurrent tasks separate and do not edit the
+    for all work and verification. Keep concurrent tasks separate and do not edit the
     primary checkout after assignment. If capacity is exhausted, report `twt list --json`; never
     alter or release another task's slot.
 

@@ -253,6 +253,82 @@ public final class TreepoolManager: Sendable {
         return SlotAssignmentResult(slot: assigned, warnings: warnings)
     }
 
+    /// Resumes an assigned pool branch, switches an existing branch into an idle slot,
+    /// or creates a new branch when no matching local or configured-remote branch exists.
+    public func startBranch(
+        _ branch: String,
+        from requestedBase: String? = nil,
+        in context: RepositoryContext,
+        slot requestedSlot: String? = nil
+    ) throws -> SlotStartResult {
+        let lock = try acquireLock(context)
+        defer { _ = lock }
+
+        var state = try loadState(context)
+        let poolSlots = try list(in: context).filter(\.isPoolSlot)
+        if let active = poolSlots.first(where: {
+            $0.branch == branch && $0.exists && !$0.detached
+        }) {
+            if let requestedSlot {
+                let requested = try resolve(requestedSlot, from: poolSlots)
+                guard requested.path == active.path else {
+                    throw TreepoolError.unsafe(
+                        "Branch '\(branch)' is already active in \(active.name), not \(requested.name)."
+                    )
+                }
+            }
+            state.slots[active.name, default: SlotState()].lastUsed = Date()
+            try saveState(state, context)
+            return SlotStartResult(
+                action: .resumed,
+                slot: try info(forPath: active.path, context: context, state: state),
+                warnings: []
+            )
+        }
+
+        let slot = try selectIdleSlot(context, state, requestedSlot: requestedSlot)
+        let slotURL = URL(fileURLWithPath: slot.path)
+        let action: SlotStartAction
+
+        if refExists("refs/heads/\(branch)", context: context) {
+            try git(["switch", branch], at: slotURL)
+            action = .switched
+        } else if refExists("refs/remotes/\(context.config.remote)/\(branch)", context: context) {
+            try git(
+                ["switch", "--track", "-c", branch, "\(context.config.remote)/\(branch)"],
+                at: slotURL
+            )
+            action = .switched
+        } else {
+            try validateNewBranchName(branch, context)
+            let configuredBase = context.config.baseBranch
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let requested = requestedBase?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let base = (requested?.isEmpty == false ? requested : nil)
+                ?? (configuredBase.isEmpty ? nil : configuredBase) else {
+                throw TreepoolError.invalidConfig(
+                    "baseBranch is empty; pass '--from REF' to 'twt start'"
+                )
+            }
+            try git(["switch", "-c", branch, try resolveRef(base, in: context)], at: slotURL)
+            action = .created
+        }
+
+        let warnings = try copyConfiguredFiles(
+            from: context.mainRoot,
+            to: slotURL,
+            patterns: context.config.copyPatterns
+        )
+        state.slots[slot.name, default: SlotState()].lastUsed = Date()
+        try saveState(state, context)
+        try runHooks(context.config.hooks.postAssign, name: "postAssign", at: slotURL)
+        return SlotStartResult(
+            action: action,
+            slot: try info(forPath: slot.path, context: context, state: state),
+            warnings: warnings
+        )
+    }
+
     public func release(_ query: String, in context: RepositoryContext) throws -> WorktreeInfo {
         let lock = try acquireLock(context)
         defer { _ = lock }
@@ -765,15 +841,19 @@ public final class TreepoolManager: Sendable {
     }
 
     private func validateBranchName(_ branch: String, _ context: RepositoryContext) throws {
+        try validateNewBranchName(branch, context)
+        guard !refExists("refs/heads/\(branch)", context: context) else {
+            throw TreepoolError.git("branch '\(branch)' already exists; use 'twt start'")
+        }
+    }
+
+    private func validateNewBranchName(_ branch: String, _ context: RepositoryContext) throws {
         let result = try ProcessRunner.run(
             "git", ["check-ref-format", "--branch", branch],
             directory: context.mainRoot,
             allowFailure: true
         )
         guard result.status == 0 else { throw TreepoolError.git("invalid branch name '\(branch)'") }
-        guard !refExists("refs/heads/\(branch)", context: context) else {
-            throw TreepoolError.git("branch '\(branch)' already exists; use 'twt switch'")
-        }
     }
 
     private func refExists(_ ref: String, context: RepositoryContext) -> Bool {

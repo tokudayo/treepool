@@ -30,6 +30,76 @@ struct TreepoolCoreTests {
     }
 
     @Test
+    func startCreatesResumesAndSwitchesWithoutCallerBranchLookup() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let context = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
+
+        let created = try fixture.manager.startBranch(
+            "feature/start", from: "main", in: context
+        )
+        #expect(created.action == .created)
+        #expect(created.slot.branch == "feature/start")
+
+        let resumed = try fixture.manager.startBranch("feature/start", in: context)
+        #expect(resumed.action == .resumed)
+        #expect(resumed.slot.path == created.slot.path)
+
+        _ = try fixture.manager.release("feature/start", in: context)
+        let switched = try fixture.manager.startBranch("feature/start", in: context)
+        #expect(switched.action == .switched)
+        #expect(switched.slot.path == created.slot.path)
+    }
+
+    @Test
+    func startUsesConfiguredBaseOnlyWhenCreating() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        _ = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
+        try fixture.writeConfig(.init(
+            baseBranch: "main",
+            pool: .init(size: 1, root: "../sample.worktrees")
+        ))
+        let context = try fixture.manager.context(at: fixture.repository)
+
+        let result = try fixture.manager.startBranch("feature/configured-start", in: context)
+        #expect(result.action == .created)
+        #expect(result.slot.branch == "feature/configured-start")
+    }
+
+    @Test
+    func startTracksExistingConfiguredRemoteBranch() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let context = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
+        try fixture.run("git", ["branch", "feature/remote-start"], at: fixture.repository)
+        try fixture.run("git", ["remote", "add", "origin", fixture.repository.path], at: fixture.repository)
+        try fixture.run("git", ["fetch", "origin"], at: fixture.repository)
+        try fixture.run("git", ["branch", "-D", "feature/remote-start"], at: fixture.repository)
+
+        let result = try fixture.manager.startBranch("feature/remote-start", in: context)
+        #expect(result.action == .switched)
+        #expect(result.slot.branch == "feature/remote-start")
+    }
+
+    @Test
+    func startHonorsExplicitSlotWhenResuming() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let context = try fixture.manager.initialize(at: fixture.repository, slotCount: 2)
+        _ = try fixture.manager.startBranch(
+            "feature/resume-slot", from: "main", in: context, slot: "tree-2"
+        )
+
+        let resumed = try fixture.manager.startBranch(
+            "feature/resume-slot", in: context, slot: "tree-2"
+        )
+        #expect(resumed.action == .resumed)
+        #expect(resumed.slot.name == "tree-2")
+        #expect(throws: TreepoolError.self) {
+            try fixture.manager.startBranch(
+                "feature/resume-slot", in: context, slot: "tree-1"
+            )
+        }
+    }
+
+    @Test
     func testExplicitSlotSelection() throws {
         let fixture = try Fixture(); defer { fixture.cleanup() }
         let context = try fixture.manager.initialize(at: fixture.repository, slotCount: 2)
@@ -264,9 +334,12 @@ struct TreepoolCoreTests {
         ))
 
         let context = try fixture.manager.context(at: fixture.repository)
-        let active = try fixture.manager.createBranch("feature/post-assign-hook", from: "main", in: context)
-        let slotRoot = URL(fileURLWithPath: active.path)
+        let started = try fixture.manager.startBranch(
+            "feature/post-assign-hook", from: "main", in: context
+        )
+        let slotRoot = URL(fileURLWithPath: started.slot.path)
 
+        #expect(started.action == .created)
         #expect(try String(contentsOf: slotRoot.appendingPathComponent("hook.cwd"), encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines) == slotRoot.path)
     }

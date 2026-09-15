@@ -23,6 +23,32 @@ struct JSONErrorEnvelope: Encodable {
     let warnings: [String] = []
 }
 
+struct StartOutput: Encodable {
+    let action: SlotStartAction
+    let name: String
+    let path: String
+    let branch: String?
+    let head: String
+    let detached: Bool
+    let clean: Bool
+    let lastUsed: Date?
+    let isPoolSlot: Bool
+    let exists: Bool
+
+    init(_ result: SlotStartResult) {
+        action = result.action
+        name = result.slot.name
+        path = result.slot.path
+        branch = result.slot.branch
+        head = result.slot.head
+        detached = result.slot.detached
+        clean = result.slot.clean
+        lastUsed = result.slot.lastUsed
+        isPoolSlot = result.slot.isPoolSlot
+        exists = result.slot.exists
+    }
+}
+
 enum CLI {
     static let manager = TreepoolManager()
 
@@ -132,10 +158,44 @@ struct Treepool: ParsableCommand {
         abstract: "A warm-pool Git worktree manager.",
         version: TreepoolBuildVersion.value,
         subcommands: [
-            Init.self, Setup.self, Repair.self, New.self, SwitchBranch.self,
+            Init.self, Setup.self, Repair.self, Start.self, New.self, SwitchBranch.self,
             List.self, Release.self, Config.self, Uninstall.self,
         ]
     )
+}
+
+struct Start: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Resume, switch to, or create a branch in a pool slot."
+    )
+
+    @Argument(help: "Task branch to resume, switch to, or create.")
+    var branch: String
+
+    @Option(name: .long, help: "Ref used only when a new branch must be created. Defaults to baseBranch.")
+    var from: String?
+
+    @Option(name: .long, help: "Slot name or path to use. Defaults to the oldest idle slot.")
+    var slot: String?
+
+    @Flag(name: .long, help: "Emit machine-readable JSON.")
+    var json = false
+
+    func run() throws {
+        try CLI.run(json: json, command: "start") {
+            let result = try CLI.manager.startBranch(
+                branch, from: from, in: CLI.context(), slot: slot
+            )
+            if json {
+                try CLI.outputJSON(StartOutput(result), command: "start", warnings: result.warnings)
+            } else {
+                print("✓ \(result.slot.name) ready (\(result.action.rawValue))")
+                print("  Branch: \(result.slot.branch ?? "(detached HEAD)")")
+                print("  Path:   \(result.slot.path)")
+                for warning in result.warnings { print("  Warning: \(warning)") }
+            }
+        }
+    }
 }
 
 struct Init: ParsableCommand {
