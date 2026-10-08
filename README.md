@@ -47,11 +47,11 @@ curl -fsSL https://raw.githubusercontent.com/tokudayo/treepool/main/scripts/inst
 
 The release installer verifies the archive checksum and puts `twt` in
 `~/.local/bin`. If that directory is not on `PATH`, it prints the command needed
-to add it for the current shell. Set `TREEPOOL_VERSION=0.2.0` to install a
+to add it for the current shell. Set `TREEPOOL_VERSION=0.2.1` to install a
 specific release.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tokudayo/treepool/main/scripts/install-release.sh | TREEPOOL_VERSION=0.2.0 bash
+curl -fsSL https://raw.githubusercontent.com/tokudayo/treepool/main/scripts/install-release.sh | TREEPOOL_VERSION=0.2.1 bash
 ```
 
 To build, test, and install from a checkout:
@@ -63,7 +63,7 @@ scripts/install.sh
 ```
 
 The source installer also installs the optional, ad-hoc-signed `Treepool.app`
-menu-bar companion in `~/Applications`. The app is source-only in v0.2.0 and is not
+menu-bar companion in `~/Applications`. The app is source-only in v0.2.1 and is not
 included in release downloads.
 
 Uninstall binaries and installed agent guidance without touching repository
