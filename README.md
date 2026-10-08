@@ -50,6 +50,18 @@ The release installer verifies the archive checksum and puts `twt` in
 to add it for the current shell. Set `TREEPOOL_VERSION=0.2.1` to install a
 specific release.
 
+Once installed, upgrade to the latest release from any directory:
+
+```sh
+twt upgrade
+```
+
+The command replaces the CLI you invoked and refreshes shell completions using
+the same checksum-verified release installer. Set `TREEPOOL_BIN_DIR` to choose
+another installation directory. Repository configuration, worktrees, and
+installed agent guidance are preserved. To select a specific release, use
+`twt upgrade --to 0.2.1`.
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/tokudayo/treepool/main/scripts/install-release.sh | TREEPOOL_VERSION=0.2.1 bash
 ```
@@ -120,6 +132,7 @@ run first; a failed hook stops force release too.
 | `twt switch BRANCH [--slot SLOT]` | Assign an existing local or `origin` branch to an idle slot, then apply configured `copyPatterns`. |
 | `twt list` | Show branches, cleanliness, state, and paths. |
 | `twt release [QUERY] [--force]` | Detach an assigned slot while preserving its branch; `--force` discards unstaged tracked changes. |
+| `twt upgrade [--to VERSION]` | Install the latest CLI release, or a specific version, and refresh shell completions. |
 | `twt uninstall` | Remove Treepool and installed agent guidance while preserving repository state. |
 
 `--slot` accepts an exact or unambiguous partial slot name or path and requires

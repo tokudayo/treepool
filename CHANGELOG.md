@@ -4,6 +4,10 @@ All notable changes to Treepool are documented here.
 
 ## Unreleased
 
+### Added
+
+- Add `twt upgrade` to install the latest CLI release and refresh shell completions, with `--to VERSION` for a specific release; repository configuration, worktrees, and installed agent guidance are preserved.
+
 ### Fixed
 
 - Open and close the macOS menu popover immediately without its zoom/fade animation, and move release confirmation scans off the UI thread.

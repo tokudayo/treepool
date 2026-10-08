@@ -159,7 +159,7 @@ struct Treepool: ParsableCommand {
         version: TreepoolBuildVersion.value,
         subcommands: [
             Init.self, Setup.self, Repair.self, Start.self, New.self, SwitchBranch.self,
-            List.self, Release.self, Config.self, Uninstall.self,
+            List.self, Release.self, Config.self, Upgrade.self, Uninstall.self,
         ]
     )
 }

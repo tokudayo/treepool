@@ -9,8 +9,7 @@ enum WorktreeSkill {
 
     # Use Treepool Worktrees
 
-    Use `twt` for pool lifecycle changes, not raw `git worktree` commands. The macOS menu-bar
-    app confirms release inside its popover and uses the same safety checks, but agents must use the CLI.
+    Use `twt` for pool lifecycle changes, not raw `git worktree` commands.
     Treepool does not fetch remotes or install dependencies.
 
     ## Select a slot
@@ -79,6 +78,10 @@ enum WorktreeSkill {
     `hooks.preRelease`, Treepool runs those commands before discarding changes, checking cleanliness,
     and detaching. A failed hook stops force release too. Never alter work merely to make release
     succeed without explicit authorization. Do not bypass a Treepool operation lock.
+
+    When the user requests a CLI upgrade, run `twt upgrade` from any directory. It installs the
+    latest release and refreshes shell completions. Use `twt upgrade --to X.Y.Z` for a specific
+    release. Repository configuration, worktrees, and installed agent guidance are preserved.
 
     Use `twt config --<harness> --remove` to remove one installed skill, or `twt uninstall` to
     remove Treepool and its unmodified skills. Neither changes repository worktrees or configuration.
