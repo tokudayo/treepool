@@ -11,10 +11,6 @@ All notable changes to Treepool are documented here.
 - Add `twt release --force` to discard unstaged tracked changes before releasing, and an Abort / Force Release warning for dirty slots in the macOS menu-bar app; staged changes, untracked files, ignored files, branches, and commits are preserved.
 - Add an optional `.twt.json` `fingerprint` file that prefers an idle slot with an exact content hash or, when no hash matches, the smallest line diff to the branch being assigned.
 
-### Changed
-
-- Run CI on release branch pushes, validate release builds for the CLI and macOS menu app, and cover force release and fingerprint selection in CLI smoke tests.
-
 ## 0.2.0 - 2026-09-15
 
 ### Added
