@@ -37,11 +37,12 @@ public struct TreepoolConfig: Codable, Sendable {
     public var baseBranch: String
     public var remote: String
     public var pool: Pool
+    public var fingerprint: String?
     public var copyPatterns: [String]
     public var hooks: Hooks
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, baseBranch, remote, pool, copyPatterns, hooks
+        case schemaVersion, baseBranch, remote, pool, fingerprint, copyPatterns, hooks
     }
 
     public init(
@@ -49,6 +50,7 @@ public struct TreepoolConfig: Codable, Sendable {
         baseBranch: String = "",
         remote: String = "origin",
         pool: Pool,
+        fingerprint: String? = nil,
         copyPatterns: [String] = [],
         hooks: Hooks = .init()
     ) {
@@ -56,6 +58,7 @@ public struct TreepoolConfig: Codable, Sendable {
         self.baseBranch = baseBranch
         self.remote = remote
         self.pool = pool
+        self.fingerprint = fingerprint
         self.copyPatterns = copyPatterns
         self.hooks = hooks
     }
@@ -66,6 +69,7 @@ public struct TreepoolConfig: Codable, Sendable {
         baseBranch = try container.decodeIfPresent(String.self, forKey: .baseBranch) ?? ""
         remote = try container.decode(String.self, forKey: .remote)
         pool = try container.decode(Pool.self, forKey: .pool)
+        fingerprint = try container.decodeIfPresent(String.self, forKey: .fingerprint)
         copyPatterns = try container.decodeIfPresent([String].self, forKey: .copyPatterns) ?? []
         hooks = try container.decodeIfPresent(Hooks.self, forKey: .hooks) ?? .init()
     }

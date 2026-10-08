@@ -19,8 +19,13 @@ extension TreepoolManager {
         let lock = try acquireLock(context)
         defer { _ = lock }
         try validateBranchName(branch, context)
-        let slot = try assignIdleSlot(in: context, requestedSlot: requestedSlot) { slotURL in
-            try git(["switch", "-c", branch, resolveRef(from, in: context)], at: slotURL)
+        let base = try resolveRef(from, in: context)
+        let slot = try assignIdleSlot(
+            in: context,
+            requestedSlot: requestedSlot,
+            fingerprintRef: base
+        ) { slotURL in
+            try git(["switch", "-c", branch, base], at: slotURL)
         }
         return SlotAssignmentResult(slot: slot.info, warnings: slot.warnings)
     }
@@ -40,7 +45,12 @@ extension TreepoolManager {
     ) throws -> SlotAssignmentResult {
         let lock = try acquireLock(context)
         defer { _ = lock }
-        let slot = try assignIdleSlot(in: context, requestedSlot: requestedSlot) { slotURL in
+        let branchRef = try existingBranchRef(branch, context: context)
+        let slot = try assignIdleSlot(
+            in: context,
+            requestedSlot: requestedSlot,
+            fingerprintRef: branchRef
+        ) { slotURL in
             try switchExistingBranch(branch, in: context, at: slotURL)
         }
         return SlotAssignmentResult(slot: slot.info, warnings: slot.warnings)
@@ -80,24 +90,34 @@ extension TreepoolManager {
         }
 
         var action = SlotStartAction.switched
+        let targetRef: String
+        if branchExists(branch, context: context) {
+            targetRef = try existingBranchRef(branch, context: context)
+        } else {
+            try validateNewBranchName(branch, context)
+            targetRef = try resolveRef(startBase(requestedBase, context: context), in: context)
+            action = .created
+        }
         let assigned = try assignIdleSlot(
             in: context,
             state: state,
-            requestedSlot: requestedSlot
+            requestedSlot: requestedSlot,
+            fingerprintRef: targetRef
         ) { slotURL in
-            if branchExists(branch, context: context) {
+            if action == .switched {
                 try switchExistingBranch(branch, in: context, at: slotURL)
             } else {
-                try validateNewBranchName(branch, context)
-                let base = try startBase(requestedBase, context: context)
-                try git(["switch", "-c", branch, resolveRef(base, in: context)], at: slotURL)
-                action = .created
+                try git(["switch", "-c", branch, targetRef], at: slotURL)
             }
         }
         return SlotStartResult(action: action, slot: assigned.info, warnings: assigned.warnings)
     }
 
-    public func release(_ query: String, in context: RepositoryContext) throws -> WorktreeInfo {
+    public func release(
+        _ query: String,
+        in context: RepositoryContext,
+        force: Bool = false
+    ) throws -> WorktreeInfo {
         let lock = try acquireLock(context)
         defer { _ = lock }
         let slot = try resolve(query, from: try list(in: context).filter(\.isPoolSlot))
@@ -106,6 +126,9 @@ extension TreepoolManager {
         }
         let slotURL = URL(fileURLWithPath: slot.path)
         try runHooks(context.config.hooks.preRelease, name: "preRelease", at: slotURL)
+        if force, try !gitStatusClean(at: slotURL) {
+            try discardUnstagedChanges(at: slotURL, slotName: slot.name)
+        }
         let afterHooks = try info(forPath: slot.path, context: context, state: loadState(context))
         guard afterHooks.clean else {
             throw TreepoolError.unsafe(
@@ -120,7 +143,11 @@ extension TreepoolManager {
     }
 
     /// Releases the managed pool slot containing `directory`.
-    public func releaseCurrent(at directory: URL, in context: RepositoryContext) throws -> WorktreeInfo {
+    public func releaseCurrent(
+        at directory: URL,
+        in context: RepositoryContext,
+        force: Bool = false
+    ) throws -> WorktreeInfo {
         let metadata = try gitMetadata(at: directory)
         guard metadata.mainRoot == context.mainRoot else { throw TreepoolError.notRepository }
         let root = URL(fileURLWithPath: try gitOutput(
@@ -133,7 +160,7 @@ extension TreepoolManager {
                 "The current directory is not a managed pool slot. Pass a branch, slot, or path to release a slot."
             )
         }
-        return try release(current.path, in: context)
+        return try release(current.path, in: context, force: force)
     }
 }
 
@@ -143,14 +170,39 @@ private struct AssignedSlot {
 }
 
 extension TreepoolManager {
+    private func discardUnstagedChanges(at directory: URL, slotName: String) throws {
+        let staged = try ProcessRunner.run(
+            "git", ["diff", "--cached", "--quiet", "--exit-code"],
+            directory: directory,
+            allowFailure: true
+        )
+        guard staged.status == 0 else {
+            throw TreepoolError.unsafe(
+                "Refusing to force release \(slotName): staged changes must be committed or resolved first."
+            )
+        }
+        guard try gitOutput(["ls-files", "--others", "--exclude-standard"], at: directory).isEmpty else {
+            throw TreepoolError.unsafe(
+                "Refusing to force release \(slotName): untracked files must be committed or removed first."
+            )
+        }
+        try git(["restore", "--worktree", "--", "."], at: directory)
+    }
+
     private func assignIdleSlot(
         in context: RepositoryContext,
         state initialState: RuntimeState? = nil,
         requestedSlot: String?,
+        fingerprintRef: String?,
         checkout: (URL) throws -> Void
     ) throws -> AssignedSlot {
         var state = try initialState ?? loadState(context)
-        let slot = try selectIdleSlot(context, state, requestedSlot: requestedSlot)
+        let slot = try selectIdleSlot(
+            context,
+            state,
+            requestedSlot: requestedSlot,
+            fingerprintRef: fingerprintRef
+        )
         let slotURL = URL(fileURLWithPath: slot.path)
         try checkout(slotURL)
         let warnings = try copyConfiguredFiles(
@@ -189,6 +241,15 @@ extension TreepoolManager {
     private func branchExists(_ branch: String, context: RepositoryContext) -> Bool {
         refExists("refs/heads/\(branch)", context: context)
             || refExists("refs/remotes/\(context.config.remote)/\(branch)", context: context)
+    }
+
+    private func existingBranchRef(_ branch: String, context: RepositoryContext) throws -> String {
+        if refExists("refs/heads/\(branch)", context: context) { return branch }
+        let remote = "\(context.config.remote)/\(branch)"
+        if refExists("refs/remotes/\(remote)", context: context) { return remote }
+        throw TreepoolError.git(
+            "branch '\(branch)' does not exist locally or on \(context.config.remote)"
+        )
     }
 
     private func startBase(_ requestedBase: String?, context: RepositoryContext) throws -> String {

@@ -40,7 +40,9 @@ enum WorktreeSkill {
     configured-remote branch into an idle slot, or creates an unknown branch. Creation uses the
     configured `baseBranch`; pass `--from` when it is empty or another ref is required. `--from`
     is ignored when the branch is resumed or switched. Pass `--slot <name-or-path>` when a
-    specific clean, detached slot is required; otherwise Treepool chooses the oldest idle slot.
+    specific clean, detached slot is required. Otherwise Treepool uses the configured `fingerprint`
+    file to prefer an exact content match, then the smallest diff; without a usable fingerprint it
+    chooses the oldest idle slot.
     A requested slot that conflicts with an already-active branch is refused. Use `new` or
     `switch` only when the user explicitly requires that precise operation.
     Read `data.action` (`resumed`, `switched`, or `created`) and use `data.path` for subsequent
@@ -66,10 +68,14 @@ enum WorktreeSkill {
     twt release <exact-branch-slot-or-path> --json
     ```
 
-    Release refuses tracked changes or non-ignored untracked files, detaches the slot, and
-    preserves the branch. If `.twt.json` configures `hooks.preRelease`, Treepool runs those commands
-    from the slot before the clean-worktree check and detach. Never alter work merely to make release
-    succeed. Do not bypass a Treepool operation lock.
+    Release refuses tracked changes or non-ignored untracked files by default, detaches the slot,
+    and preserves the branch. Only when the user explicitly authorizes discarding unstaged changes,
+    use `twt release --force --json` (with an exact query when outside the slot). Force release
+    discards unstaged tracked edits and deletions; staged changes and non-ignored untracked files
+    block it before any changes are discarded. Ignored files are kept. If `.twt.json` configures
+    `hooks.preRelease`, Treepool runs those commands before discarding changes, checking cleanliness,
+    and detaching. A failed hook stops force release too. Never alter work merely to make release
+    succeed without explicit authorization. Do not bypass a Treepool operation lock.
 
     Use `twt config --<harness> --remove` to remove one installed skill, or `twt uninstall` to
     remove Treepool and its unmodified skills. Neither changes repository worktrees or configuration.

@@ -89,19 +89,39 @@ final class MenuStore: ObservableObject {
     }
 
     func requestRelease(_ slot: WorktreeInfo, in repository: RepositorySnapshot) {
+        let current: WorktreeInfo
+        do {
+            guard let found = try manager.list(in: repository.context).first(where: { $0.path == slot.path }),
+                  canRelease(found) else {
+                refresh()
+                return
+            }
+            current = found
+        } catch {
+            errorMessage = String(describing: error)
+            return
+        }
         let alert = NSAlert()
-        alert.messageText = "Release \(slot.name)?"
-        alert.informativeText = if let branch = slot.branch {
-            "The slot detaches from '\(branch)' and returns to the pool. The branch and its commits are kept. Slots with uncommitted changes are refused."
+        alert.messageText = current.clean ? "Release \(current.name)?" : "Force release \(current.name)?"
+        alert.informativeText = if !current.clean {
+            "This slot has uncommitted changes. Force Release permanently discards unstaged changes to tracked files and returns the slot to the pool. Staged changes and untracked files block release and are kept. The branch and its commits are kept."
+        } else if let branch = current.branch {
+            "The slot detaches from '\(branch)' and returns to the pool. The branch and its commits are kept."
         } else {
-            "The slot detaches and returns to the pool. Branches and commits are kept. Slots with uncommitted changes are refused."
+            "The slot detaches and returns to the pool. Branches and commits are kept."
         }
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Release Slot")
-        alert.addButton(withTitle: "Cancel")
+        if current.clean {
+            alert.addButton(withTitle: "Release Slot")
+            alert.addButton(withTitle: "Abort")
+        } else {
+            alert.addButton(withTitle: "Abort")
+            alert.addButton(withTitle: "Force Release")
+        }
         NSApplication.shared.activate(ignoringOtherApps: true)
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        release(slot, in: repository)
+        let response = alert.runModal()
+        guard response == (current.clean ? .alertFirstButtonReturn : .alertSecondButtonReturn) else { return }
+        release(current, in: repository, force: !current.clean)
     }
 
     @discardableResult
@@ -168,11 +188,11 @@ final class MenuStore: ObservableObject {
         refresh()
     }
 
-    private func release(_ slot: WorktreeInfo, in repository: RepositorySnapshot) {
+    private func release(_ slot: WorktreeInfo, in repository: RepositorySnapshot, force: Bool) {
         let manager = manager
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
-                _ = try manager.release(slot.path, in: repository.context)
+                _ = try manager.release(slot.path, in: repository.context, force: force)
                 await self?.finishRelease(message: nil)
             } catch {
                 await self?.finishRelease(message: String(describing: error))

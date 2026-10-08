@@ -129,7 +129,8 @@ extension TreepoolManager {
     func selectIdleSlot(
         _ context: RepositoryContext,
         _ state: RuntimeState,
-        requestedSlot: String? = nil
+        requestedSlot: String? = nil,
+        fingerprintRef: String? = nil
     ) throws -> WorktreeInfo {
         let slots = try rawWorktrees(in: context).compactMap { raw -> WorktreeInfo? in
             guard slotName(for: URL(fileURLWithPath: raw.path), context: context) != nil else {
@@ -145,12 +146,91 @@ extension TreepoolManager {
             return slot
         }
         let idleSlots = slots.filter { $0.detached && $0.clean }
+        guard !idleSlots.isEmpty else {
+            throw TreepoolError.noAvailableSlot
+        }
+        if let fingerprint = try normalizedFingerprint(context.config.fingerprint),
+           let fingerprintRef,
+           let slot = try selectFingerprintSlot(
+               from: idleSlots,
+               targetRef: fingerprintRef,
+               fingerprint: fingerprint,
+               context: context
+           ) {
+            return slot
+        }
         guard let slot = idleSlots.min(by: {
             ($0.lastUsed ?? .distantPast) < ($1.lastUsed ?? .distantPast)
         }) else {
             throw TreepoolError.noAvailableSlot
         }
         return slot
+    }
+
+    private func selectFingerprintSlot(
+        from slots: [WorktreeInfo],
+        targetRef: String,
+        fingerprint: String,
+        context: RepositoryContext
+    ) throws -> WorktreeInfo? {
+        guard let targetHash = fingerprintHash(
+            ref: targetRef, path: fingerprint, context: context
+        ) else { return nil }
+
+        let ranked = slots.map { slot in
+            let hash = fingerprintHash(ref: slot.head, path: fingerprint, context: context)
+            return (
+                slot: slot,
+                exact: hash == targetHash,
+                changes: hash == targetHash
+                    ? 0
+                    : fingerprintChangeCount(
+                        from: slot.head,
+                        to: targetRef,
+                        path: fingerprint,
+                        context: context
+                    )
+            )
+        }
+        return ranked.min {
+            if $0.exact != $1.exact { return $0.exact && !$1.exact }
+            if $0.changes != $1.changes { return $0.changes < $1.changes }
+            return ($0.slot.lastUsed ?? .distantPast) < ($1.slot.lastUsed ?? .distantPast)
+        }?.slot
+    }
+
+    private func fingerprintHash(
+        ref: String,
+        path: String,
+        context: RepositoryContext
+    ) -> String? {
+        let result = try? ProcessRunner.run(
+            "git", ["rev-parse", "--verify", "--quiet", "\(ref):\(path)"],
+            directory: context.mainRoot,
+            allowFailure: true
+        )
+        guard let result, result.status == 0, !result.stdout.isEmpty else { return nil }
+        return result.stdout
+    }
+
+    private func fingerprintChangeCount(
+        from sourceRef: String,
+        to targetRef: String,
+        path: String,
+        context: RepositoryContext
+    ) -> Int {
+        let result = try? ProcessRunner.run(
+            "git", ["diff", "--numstat", sourceRef, targetRef, "--", path],
+            directory: context.mainRoot,
+            allowFailure: true
+        )
+        guard let result, result.status == 0, !result.stdout.isEmpty else { return .max }
+        let fields = result.stdout.split(whereSeparator: \.isWhitespace)
+        guard fields.count >= 2,
+              let additions = Int(fields[0]),
+              let deletions = Int(fields[1]) else { return .max }
+        let (changes, overflow) = additions.addingReportingOverflow(deletions)
+        return overflow ? .max : changes
     }
 
     func resolve(_ query: String, from items: [WorktreeInfo]) throws -> WorktreeInfo {

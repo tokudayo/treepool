@@ -51,6 +51,7 @@ extension TreepoolManager {
                 "pool.pattern must produce unique single-component slot names"
             )
         }
+        _ = try normalizedFingerprint(config.fingerprint)
         _ = try normalizedCopyPatterns(config.copyPatterns)
         try validateHooks(config.hooks.postAssign, name: "postAssign")
         try validateHooks(config.hooks.preRelease, name: "preRelease")
@@ -64,6 +65,32 @@ extension TreepoolManager {
         guard root != main, !isDescendant(root, of: main) else {
             throw TreepoolError.invalidConfig("pool.root must be outside the primary checkout")
         }
+    }
+
+    func normalizedFingerprint(_ fingerprint: String?) throws -> String? {
+        guard let fingerprint else { return nil }
+        var normalized = fingerprint.trimmingCharacters(in: .whitespacesAndNewlines)
+        while normalized.hasPrefix("./") { normalized.removeFirst(2) }
+        guard !normalized.isEmpty else {
+            throw TreepoolError.invalidConfig("fingerprint must not be empty")
+        }
+        guard !normalized.hasPrefix("/") else {
+            throw TreepoolError.invalidConfig("fingerprint must be a repository-relative file")
+        }
+        guard !normalized.contains("*") else {
+            throw TreepoolError.invalidConfig("fingerprint must name one file and must not contain wildcards")
+        }
+        let components = normalized.split(separator: "/", omittingEmptySubsequences: false)
+        guard !components.contains(where: \.isEmpty) else {
+            throw TreepoolError.invalidConfig("fingerprint must not contain empty path components")
+        }
+        guard !components.contains(where: { $0 == ".." }) else {
+            throw TreepoolError.invalidConfig("fingerprint must not escape the repository root")
+        }
+        guard !components.contains(where: { $0 == ".git" }) else {
+            throw TreepoolError.invalidConfig("fingerprint must not target .git metadata")
+        }
+        return normalized
     }
 
     func validateHooks(_ commands: [String], name: String) throws {

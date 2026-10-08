@@ -24,6 +24,46 @@ test "$(git rev-parse --verify refs/heads/smoke/branch)" != ""
 "$TWT" start smoke/branch --json | grep -F '"action" : "switched"' >/dev/null
 "$TWT" release smoke/branch --json | grep '"detached" : true' >/dev/null
 
+SLOT="$STAGE/repository.worktrees/tree-1"
+"$TWT" start smoke/force --from main --json >/dev/null
+printf 'discard\n' > "$SLOT/README.md"
+set +e
+"$TWT" release smoke/force --json >/dev/null 2> "$STAGE/dirty-error.json"
+STATUS=$?
+set -e
+test "$STATUS" -eq 5
+test "$(cat "$SLOT/README.md")" = discard
+"$TWT" release smoke/force --force --json | grep '"detached" : true' >/dev/null
+test "$(cat "$SLOT/README.md")" = seed
+test "$(git rev-parse --verify refs/heads/smoke/force)" = "$(git rev-parse main)"
+
+"$TWT" start smoke/force --json >/dev/null
+printf 'staged\n' > "$SLOT/README.md"
+git -C "$SLOT" add README.md
+printf 'unstaged\n' > "$SLOT/README.md"
+set +e
+"$TWT" release smoke/force --force --json >/dev/null 2> "$STAGE/staged-error.json"
+STATUS=$?
+set -e
+test "$STATUS" -eq 5
+grep -q 'staged changes' "$STAGE/staged-error.json"
+test "$(cat "$SLOT/README.md")" = unstaged
+test "$(git -C "$SLOT" show :README.md)" = staged
+git -C "$SLOT" restore --staged README.md
+printf 'keep\n' > "$SLOT/new.txt"
+set +e
+"$TWT" release smoke/force --force --json >/dev/null 2> "$STAGE/untracked-error.json"
+STATUS=$?
+set -e
+test "$STATUS" -eq 5
+grep -q 'untracked files' "$STAGE/untracked-error.json"
+test "$(cat "$SLOT/new.txt")" = keep
+test "$(cat "$SLOT/README.md")" = unstaged
+rm "$SLOT/new.txt"
+mkdir "$SLOT/nested"
+(cd "$SLOT/nested" && "$TWT" release --force --json) | grep '"detached" : true' >/dev/null
+test "$(cat "$SLOT/README.md")" = seed
+
 sed 's/"baseBranch" : ""/"baseBranch" : "main"/' .twt.json > .twt.json.tmp
 mv .twt.json.tmp .twt.json
 "$TWT" new smoke/default --json | grep -F '"branch" : "smoke\/default"' >/dev/null
@@ -54,6 +94,28 @@ STATUS=$?
 set -e
 test "$STATUS" -eq 3
 grep -q '"code" : "already_configured"' "$STAGE/error.json"
+
+# Fingerprint selection must prefer a warm match over the oldest idle slot.
+printf 'base\n' > dependencies.lock
+git add dependencies.lock
+git commit -m 'add fingerprint' >/dev/null
+git switch -c smoke/fingerprint >/dev/null
+printf 'target\n' > dependencies.lock
+git add dependencies.lock
+git commit -m 'change fingerprint' >/dev/null
+git switch main >/dev/null
+sed -e 's/"size" : 1/"size" : 2/' \
+    -e '/"schemaVersion"/i\
+  "fingerprint" : "dependencies.lock",\
+' .twt.json > .twt.json.tmp
+mv .twt.json.tmp .twt.json
+"$TWT" setup --json >/dev/null
+"$TWT" switch smoke/fingerprint --slot tree-2 --json >/dev/null
+"$TWT" release tree-2 --json >/dev/null
+"$TWT" switch smoke/fingerprint --json | grep '"name" : "tree-2"' >/dev/null
+"$TWT" release tree-2 --json >/dev/null
+"$TWT" new smoke/fingerprint-new --from smoke/fingerprint --json | grep '"name" : "tree-2"' >/dev/null
+"$TWT" release tree-2 --json >/dev/null
 
 INSTALL="$STAGE/install"
 mkdir -p "$INSTALL/bin" "$INSTALL/zsh" "$INSTALL/bash" "$INSTALL/fish"

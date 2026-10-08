@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/v*"]
   pull_request:
 
 jobs:
@@ -18,10 +18,13 @@ jobs:
         run: swift build
       - name: Test
         run: swift test
+      - name: Release build
+        run: swift build -c release --product twt
+      - name: Menu app release build
+        run: swift build -c release --product TreepoolMenu
       - name: CLI smoke test
         run: |
-          swift build --product twt
-          scripts/smoke-test.sh .build/debug/twt
+          scripts/smoke-test.sh .build/release/twt
 
   linux:
     runs-on: ubuntu-24.04
@@ -39,7 +42,8 @@ jobs:
         run: swift build
       - name: Test
         run: swift test
+      - name: Release build
+        run: swift build -c release --product twt
       - name: CLI smoke test
         run: |
-          swift build --product twt
-          scripts/smoke-test.sh .build/debug/twt
+          scripts/smoke-test.sh .build/release/twt
