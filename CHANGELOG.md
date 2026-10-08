@@ -4,6 +4,13 @@ All notable changes to Treepool are documented here.
 
 ## Unreleased
 
+## 0.2.1 - 2026-10-09
+
+### Added
+
+- Add `twt release --force` to discard unstaged tracked changes before releasing, and an Abort / Force Release warning for dirty slots in the macOS menu-bar app; staged changes, untracked files, ignored files, branches, and commits are preserved.
+- Add an optional `.twt.json` `fingerprint` file that prefers an idle slot with an exact content hash or, when no hash matches, the smallest line diff to the branch being assigned.
+
 ## 0.2.0 - 2026-09-15
 
 ### Added

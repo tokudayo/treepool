@@ -2,7 +2,7 @@
 
 - Swift 6 package; run `swift test` and `swift build -c release --product twt` before handoff.
 - Keep lifecycle actions in the CLI; menu-bar release must use `TreepoolCore` with identical safety guarantees.
-- `twt release` must refuse dirty worktrees and preserve branches.
+- `twt release` must refuse dirty worktrees by default and preserve branches; explicit `--force` may discard unstaged tracked changes, but staged changes and non-ignored untracked files must block it before anything is discarded.
 - Agent guidance is opt-in through `twt config --codex`, `--claude-code`, `--opencode`, or `--pi`.
 - Update `Sources/twt/WorktreeSkill.swift` whenever commands or workflow behavior change.
 - Start a release by fast-forwarding `main` from `origin/main` and creating `release/vX.Y.Z`; never develop releases on `main`.

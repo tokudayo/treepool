@@ -23,7 +23,8 @@ removing worktree directories.
 
 - Reusable, pre-warmed worktree slots for parallel work.
 - One-command task pickup with `twt start`, whether the branch is active, existing, or new.
-- Safe release: dirty worktrees are never detached, cleaned, or deleted.
+- Safe release: dirty worktrees are refused by default; explicit force release can discard unstaged tracked changes.
+- Optional `fingerprint` file to reuse the idle slot closest to a branch's dependency state.
 - Optional `copyPatterns` to mirror repo files into newly assigned slots.
 - JSON output for scripts and coding-agent workflows.
 - Optional macOS menu-bar companion for viewing configured repositories.
@@ -46,11 +47,11 @@ curl -fsSL https://raw.githubusercontent.com/tokudayo/treepool/main/scripts/inst
 
 The release installer verifies the archive checksum and puts `twt` in
 `~/.local/bin`. If that directory is not on `PATH`, it prints the command needed
-to add it for the current shell. Set `TREEPOOL_VERSION=0.2.0` to install a
+to add it for the current shell. Set `TREEPOOL_VERSION=0.2.1` to install a
 specific release.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tokudayo/treepool/main/scripts/install-release.sh | TREEPOOL_VERSION=0.2.0 bash
+curl -fsSL https://raw.githubusercontent.com/tokudayo/treepool/main/scripts/install-release.sh | TREEPOOL_VERSION=0.2.1 bash
 ```
 
 To build, test, and install from a checkout:
@@ -62,7 +63,7 @@ scripts/install.sh
 ```
 
 The source installer also installs the optional, ad-hoc-signed `Treepool.app`
-menu-bar companion in `~/Applications`. The app is source-only in v0.2.0 and is not
+menu-bar companion in `~/Applications`. The app is source-only in v0.2.1 and is not
 included in release downloads.
 
 Uninstall binaries and installed agent guidance without touching repository
@@ -102,6 +103,11 @@ twt release
 Release refuses dirty worktrees, detaches the clean slot, and preserves the
 branch. Treepool never deletes branches.
 
+Use `twt release --force` to discard unstaged tracked edits and deletions before
+releasing. Staged changes and non-ignored untracked files block force release
+before any changes are discarded. Ignored files are kept. Pre-release hooks
+run first; a failed hook stops force release too.
+
 ## Commands
 
 | Command | Purpose |
@@ -113,13 +119,14 @@ branch. Treepool never deletes branches.
 | `twt new BRANCH [--from REF] [--slot SLOT]` | Create a branch from `REF` or the configured base branch, then apply configured `copyPatterns`. |
 | `twt switch BRANCH [--slot SLOT]` | Assign an existing local or `origin` branch to an idle slot, then apply configured `copyPatterns`. |
 | `twt list` | Show branches, cleanliness, state, and paths. |
-| `twt release [QUERY]` | Detach a clean assigned slot while preserving its branch. |
+| `twt release [QUERY] [--force]` | Detach an assigned slot while preserving its branch; `--force` discards unstaged tracked changes. |
 | `twt uninstall` | Remove Treepool and installed agent guidance while preserving repository state. |
 
 `--slot` accepts an exact or unambiguous partial slot name or path and requires
 that slot to be clean and detached when an assignment is needed. Without it,
-`start`, `new`, and `switch` choose the oldest idle slot. If `start` finds the
-branch already active, it resumes that slot; a conflicting `--slot` is refused.
+`start`, `new`, and `switch` use `fingerprint` selection when configured, then
+fall back to the oldest idle slot. If `start` finds the branch already active,
+it resumes that slot; a conflicting `--slot` is refused.
 `--from` is consulted only when `start` creates a branch, so the same invocation
 can safely resume or switch that branch later.
 `QUERY` accepts an exact or unambiguous partial slot name, branch, or path. With
@@ -145,6 +152,7 @@ operation locks live in the repository's common `.git/twt/` directory.
     "root": "../my-project.worktrees",
     "pattern": "tree-{index}"
   },
+  "fingerprint": "Package.resolved",
   "copyPatterns": [
     ".env.local",
     "config/local/**/*.json"
@@ -172,6 +180,7 @@ Run your repository's usual setup commands in each assigned slot as needed.
 | `pool.size` | integer | `4` | Number of managed warm slots. Must be between `1` and `64`. |
 | `pool.root` | string | `../<repo>.worktrees` from `twt init` | Directory containing managed slots. Relative paths are resolved from the primary checkout. Must be outside the primary checkout. |
 | `pool.pattern` | string | `"tree-{index}"` | Slot directory name pattern. Must contain exactly one `{index}` and produce unique single-component names. |
+| `fingerprint` | string | omitted | Repository-relative file used to select an idle slot for `twt start`, `twt new`, and `twt switch`. Treepool prefers an exact Git blob hash match; otherwise it chooses the slot whose retained version has the fewest changed lines. Ties use the oldest idle slot. Wildcards are not supported. |
 | `copyPatterns` | string array | `[]` | Repository-relative glob patterns copied from the primary checkout into slots assigned by `twt start`, `twt new`, and `twt switch`. Supports `*`, `?`, and `**`. Patterns must not be absolute, contain empty path components, contain `..`, or target `.git` metadata. |
 | `hooks.postAssign` | string array | `[]` | Shell commands run from the assigned slot after `twt start`, `twt new`, or `twt switch` checks out the branch and applies `copyPatterns`. A resumed `twt start` does not rerun assignment work. Commands run in order; the first non-zero exit stops the command. |
 | `hooks.preRelease` | string array | `[]` | Shell commands run from the assigned slot before `twt release` detaches it. Commands run in order; the first non-zero exit stops release and leaves the slot active. |
@@ -179,6 +188,11 @@ Run your repository's usual setup commands in each assigned slot as needed.
 When `copyPatterns` is set, matching files are copied to the same relative paths
 in the assigned slot. Existing files at those paths are replaced. If a pattern
 matches no files, Treepool reports a warning but still assigns the slot.
+
+When `fingerprint` is set and no explicit `--slot` is passed, Treepool compares
+the file in the branch or creation base with the retained versions in clean,
+detached slots. If the file is absent from the target ref, selection falls back
+to the oldest idle slot.
 
 Hooks run with `/bin/sh -c` from the assigned slot root. `preRelease` hooks run
 before the clean-worktree check, so they may update generated files or fail the
@@ -215,12 +229,14 @@ Removal preserves modified skill files unless `--force` is passed.
 
 Open `~/Applications/Treepool.app`, choose **Add Repository…**, then select a
 repository with `.twt.json`. The app shows worktree status, can reveal or copy
-worktree paths, and can safely release clean active slots. Configure repositories
+worktree paths, and can release active slots. Choosing **Release Slot…** for a
+dirty slot warns you and offers **Abort** or **Force Release**, with the same
+behavior as `twt release --force`. Configure repositories
 with `twt init` or `twt setup` before adding them.
 
 ## Troubleshooting
 
-- Dirty slots cannot be released; commit or otherwise resolve changes yourself.
+- Dirty slots are refused by default; commit or resolve changes, or use `twt release --force` to discard unstaged tracked changes. Staged changes and untracked files still block release.
 - An exhausted pool is shown by `twt list`; Treepool never repurposes active slots.
 - Treepool does not fetch. Fetch missing remote refs with Git before `start`, `new`, or `switch`.
 - Run `twt repair --dry-run` for a missing configured slot.

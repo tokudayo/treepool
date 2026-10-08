@@ -175,7 +175,7 @@ struct Start: ParsableCommand {
     @Option(name: .long, help: "Ref used only when a new branch must be created. Defaults to baseBranch.")
     var from: String?
 
-    @Option(name: .long, help: "Slot name or path to use. Defaults to the oldest idle slot.")
+    @Option(name: .long, help: "Slot name or path to use. By default, selects an idle slot automatically.")
     var slot: String?
 
     @Flag(name: .long, help: "Emit machine-readable JSON.")
@@ -274,7 +274,7 @@ struct New: ParsableCommand {
     @Option(name: .long, help: "Ref from which to create the branch. Defaults to baseBranch.")
     var from: String?
 
-    @Option(name: .long, help: "Slot name or path to use. Defaults to the oldest idle slot.")
+    @Option(name: .long, help: "Slot name or path to use. By default, selects an idle slot automatically.")
     var slot: String?
 
     @Flag(name: .long, help: "Emit machine-readable JSON.")
@@ -308,7 +308,7 @@ struct SwitchBranch: ParsableCommand {
     @Argument(help: "Local or remote branch name.")
     var branch: String
 
-    @Option(name: .long, help: "Slot name or path to use. Defaults to the oldest idle slot.")
+    @Option(name: .long, help: "Slot name or path to use. By default, selects an idle slot automatically.")
     var slot: String?
 
     @Flag(name: .long, help: "Emit machine-readable JSON.")
@@ -350,6 +350,9 @@ struct Release: ParsableCommand {
     @Argument(help: "Slot, branch, or partial name. Defaults to the current managed slot.")
     var query: String?
 
+    @Flag(name: .long, help: "Discard unstaged tracked changes before release. Staged changes and untracked files are refused.")
+    var force = false
+
     @Flag(name: .long, help: "Emit machine-readable JSON.")
     var json = false
 
@@ -357,9 +360,9 @@ struct Release: ParsableCommand {
         try CLI.run(json: json, command: "release") {
             let context = try CLI.context()
             let slot = if let query {
-                try CLI.manager.release(query, in: context)
+                try CLI.manager.release(query, in: context, force: force)
             } else {
-                try CLI.manager.releaseCurrent(at: CLI.cwd, in: context)
+                try CLI.manager.releaseCurrent(at: CLI.cwd, in: context, force: force)
             }
             if json { try CLI.outputJSON(slot, command: "release") }
             else {

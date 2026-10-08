@@ -140,6 +140,84 @@ struct TreepoolCoreTests {
         #expect(throws: TreepoolError.self) { try fixture.manager.release("feature/dirty", in: context) }
     }
 
+    @Test(arguments: [false, true])
+    func forceReleaseDiscardsTrackedEditsAndDeletions(fromCurrentDirectory: Bool) throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        try fixture.commitFile("deleted.txt", contents: "keep\n", message: "add file")
+        let context = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
+        let active = try fixture.manager.createBranch("feature/force", from: "main", in: context)
+        let root = URL(fileURLWithPath: active.path)
+        try Data("changed\n".utf8).write(to: root.appendingPathComponent("README.md"))
+        try FileManager.default.removeItem(at: root.appendingPathComponent("deleted.txt"))
+        try Data("cache\n".utf8).write(to: root.appendingPathComponent("cache.tmp"))
+        let exclude = context.commonGitDirectory.appendingPathComponent("info/exclude")
+        try Data("cache.tmp\n".utf8).write(to: exclude)
+        let nested = root.appendingPathComponent("nested")
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+
+        #expect(throws: TreepoolError.self) {
+            try fixture.manager.release(active.name, in: context)
+        }
+        #expect(try String(contentsOf: root.appendingPathComponent("README.md"), encoding: .utf8) == "changed\n")
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("deleted.txt").path))
+
+        let released = if fromCurrentDirectory {
+            try fixture.manager.releaseCurrent(at: nested, in: context, force: true)
+        } else {
+            try fixture.manager.release(active.name, in: context, force: true)
+        }
+        #expect(released.detached && released.clean)
+        #expect(released.head == active.head)
+        #expect(try String(contentsOf: root.appendingPathComponent("README.md"), encoding: .utf8) == "hello\n")
+        #expect(try String(contentsOf: root.appendingPathComponent("deleted.txt"), encoding: .utf8) == "keep\n")
+        #expect(try String(contentsOf: root.appendingPathComponent("cache.tmp"), encoding: .utf8) == "cache\n")
+        #expect(try fixture.run("git", ["rev-parse", "refs/heads/feature/force"], at: root).stdout == active.head)
+    }
+
+    @Test(arguments: ["staged", "untracked"])
+    func forceReleaseRefusesProtectedChangesBeforeDiscardingAnything(kind: String) throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let context = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
+        let active = try fixture.manager.createBranch("feature/protected", from: "main", in: context)
+        let root = URL(fileURLWithPath: active.path)
+        if kind == "staged" {
+            try Data("staged\n".utf8).write(to: root.appendingPathComponent("README.md"))
+            try fixture.run("git", ["add", "README.md"], at: root)
+        } else {
+            try Data("untracked\n".utf8).write(to: root.appendingPathComponent("new.txt"))
+        }
+        try Data("unstaged\n".utf8).write(to: root.appendingPathComponent("README.md"))
+        let before = try fixture.run("git", ["status", "--porcelain"], at: root).stdout
+
+        #expect(throws: TreepoolError.self) {
+            try fixture.manager.release(active.name, in: context, force: true)
+        }
+        #expect(try fixture.run("git", ["status", "--porcelain"], at: root).stdout == before)
+        #expect(try String(contentsOf: root.appendingPathComponent("README.md"), encoding: .utf8) == "unstaged\n")
+        #expect(try fixture.run("git", ["branch", "--show-current"], at: root).stdout == "feature/protected")
+        if kind == "staged" {
+            #expect(try fixture.run("git", ["show", ":README.md"], at: root).stdout == "staged")
+        } else {
+            #expect(try String(contentsOf: root.appendingPathComponent("new.txt"), encoding: .utf8) == "untracked\n")
+        }
+    }
+
+    @Test
+    func forceReleaseRunsHooksBeforeDiscardingChanges() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        _ = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
+        try fixture.writeConfig(.init(
+            baseBranch: "main",
+            pool: .init(size: 1, root: "../sample.worktrees"),
+            hooks: .init(preRelease: ["printf generated > README.md"])
+        ))
+        let context = try fixture.manager.context(at: fixture.repository)
+        let active = try fixture.manager.createBranch("feature/hook-force", from: "main", in: context)
+        let released = try fixture.manager.release(active.name, in: context, force: true)
+        #expect(released.detached && released.clean)
+        #expect(try String(contentsOfFile: active.path + "/README.md", encoding: .utf8) == "hello\n")
+    }
+
     @Test
     func testCurrentSlotReleaseUsesWorktreeRoot() throws {
         let fixture = try Fixture(); defer { fixture.cleanup() }
@@ -221,6 +299,7 @@ struct TreepoolCoreTests {
             .write(to: fixture.repository.appendingPathComponent(".twt.json"))
         let config = try fixture.manager.context(at: fixture.repository).config
         #expect(config.baseBranch == "")
+        #expect(config.fingerprint == nil)
         #expect(config.copyPatterns.isEmpty)
         #expect(config.hooks.postAssign.isEmpty)
         #expect(config.hooks.preRelease.isEmpty)
@@ -237,6 +316,84 @@ struct TreepoolCoreTests {
         let context = try fixture.manager.context(at: fixture.repository)
         let active = try fixture.manager.createBranch("feature/explicit", from: "main", in: context)
         #expect(active.branch == "feature/explicit")
+    }
+
+    @Test
+    func fingerprintRejectsWildcardPaths() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        try fixture.writeConfig(.init(
+            baseBranch: "main",
+            pool: .init(size: 2, root: "../sample.worktrees"),
+            fingerprint: "Package*.resolved"
+        ))
+
+        #expect(throws: TreepoolError.self) {
+            try fixture.manager.context(at: fixture.repository)
+        }
+    }
+
+    @Test
+    func fingerprintHashMatchTakesPriorityOverOldestSlot() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        try fixture.commitFile("dependencies.lock", contents: "base\n", message: "add lockfile")
+        try fixture.run("git", ["switch", "-c", "feature/hash-target"], at: fixture.repository)
+        try fixture.commitFile("dependencies.lock", contents: "target\n", message: "update lockfile")
+        try fixture.run("git", ["switch", "main"], at: fixture.repository)
+
+        _ = try fixture.manager.initialize(at: fixture.repository, slotCount: 2)
+        try fixture.writeConfig(.init(
+            baseBranch: "main",
+            pool: .init(size: 2, root: "../sample.worktrees"),
+            fingerprint: "dependencies.lock"
+        ))
+        let context = try fixture.manager.context(at: fixture.repository)
+        _ = try fixture.manager.switchBranch(
+            "feature/hash-target", in: context, slot: "tree-2"
+        )
+        _ = try fixture.manager.release("tree-2", in: context)
+
+        let selected = try fixture.manager.switchBranch("feature/hash-target", in: context)
+        #expect(selected.name == "tree-2")
+    }
+
+    @Test
+    func fingerprintDiffChoosesMostSimilarSlotWhenHashesDiffer() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        try fixture.commitFile(
+            "dependencies.lock",
+            contents: "alpha\nbeta\ngamma\n",
+            message: "add lockfile"
+        )
+        try fixture.run("git", ["branch", "feature/similarity-target"], at: fixture.repository)
+        try fixture.run("git", ["switch", "-c", "feature/close"], at: fixture.repository)
+        try fixture.commitFile(
+            "dependencies.lock",
+            contents: "alpha\nbeta\ndelta\n",
+            message: "make close fingerprint"
+        )
+        try fixture.run("git", ["switch", "main"], at: fixture.repository)
+        try fixture.run("git", ["switch", "-c", "feature/far"], at: fixture.repository)
+        try fixture.commitFile(
+            "dependencies.lock",
+            contents: "red\ngreen\nblue\n",
+            message: "make far fingerprint"
+        )
+        try fixture.run("git", ["switch", "main"], at: fixture.repository)
+
+        _ = try fixture.manager.initialize(at: fixture.repository, slotCount: 2)
+        try fixture.writeConfig(.init(
+            baseBranch: "main",
+            pool: .init(size: 2, root: "../sample.worktrees"),
+            fingerprint: "dependencies.lock"
+        ))
+        let context = try fixture.manager.context(at: fixture.repository)
+        _ = try fixture.manager.switchBranch("feature/far", in: context, slot: "tree-1")
+        _ = try fixture.manager.release("tree-1", in: context)
+        _ = try fixture.manager.switchBranch("feature/close", in: context, slot: "tree-2")
+        _ = try fixture.manager.release("tree-2", in: context)
+
+        let selected = try fixture.manager.switchBranch("feature/similarity-target", in: context)
+        #expect(selected.name == "tree-2")
     }
 
     @Test
@@ -379,6 +536,12 @@ struct TreepoolCoreTests {
         let context = try fixture.manager.context(at: fixture.repository)
         let active = try fixture.manager.createBranch("feature/failing-hook", from: "main", in: context)
         #expect(throws: TreepoolError.self) { try fixture.manager.release(active.name, in: context) }
+        let readme = URL(fileURLWithPath: active.path).appendingPathComponent("README.md")
+        try Data("keep unstaged\n".utf8).write(to: readme)
+        #expect(throws: TreepoolError.self) {
+            try fixture.manager.release(active.name, in: context, force: true)
+        }
+        #expect(try String(contentsOf: readme, encoding: .utf8) == "keep unstaged\n")
         #expect(try fixture.manager.list(in: context).first(where: { $0.name == active.name })?.branch == active.branch)
     }
 
@@ -452,6 +615,12 @@ private final class Fixture {
             to: repository.appendingPathComponent(".twt.json"),
             options: .atomic
         )
+    }
+
+    func commitFile(_ path: String, contents: String, message: String) throws {
+        try Data(contents.utf8).write(to: repository.appendingPathComponent(path))
+        try run("git", ["add", "--", path], at: repository)
+        try run("git", ["commit", "-m", message], at: repository)
     }
 
     @discardableResult
