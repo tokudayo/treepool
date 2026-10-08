@@ -60,6 +60,9 @@ enum WorktreeSkill {
 
     ## Hand off and release
 
+    For software publication, follow the repository's release instructions. When CI creates
+    version tags after a release PR merges, leave tagging to that workflow.
+
     Commit, push, and verify from the assigned worktree. Report its branch, path, verification,
     and Git state. Keep it active by default; release only when asked or explicitly required:
 

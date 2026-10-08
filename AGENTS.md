@@ -10,4 +10,4 @@
 - During development, keep `VERSION` at the latest published version and changes under `CHANGELOG.md` → `Unreleased`.
 - Once finalized, bump `VERSION`, create the dated changelog section, and raise a PR from the release branch to `main`.
 - Keep changelog sections grouped under applicable `Added`, `Changed`, `Fixed`, and `Documentation` headings; never manually wrap bullets.
-- After the PR merges, push `main`, create annotated tag `v$(cat VERSION)`, and push it; tag/version mismatches fail CI.
+- After a `release/vX.Y.Z` PR merges into `main`, successful main push CI triggers `Prepare release tag`, which validates the branch, `VERSION`, and dated changelog, creates the annotated tag at the tested merge commit, and dispatches the Release workflow. Do not manually tag normal releases; tag/version mismatches and conflicting tags fail automation.

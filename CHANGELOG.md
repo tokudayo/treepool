@@ -4,6 +4,10 @@ All notable changes to Treepool are documented here.
 
 ## Unreleased
 
+### Added
+
+- Automatically create an annotated version tag and start publication after a matching release branch is merged into main and its CI passes; validate the release branch, version, and dated changelog, reject conflicting tags, and support retries without duplicating active or published releases.
+
 ## 0.2.1 - 2026-10-09
 
 ### Added

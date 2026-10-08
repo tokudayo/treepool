@@ -249,6 +249,11 @@ swift test
 swift build -c release --product twt
 ```
 
+Releases are prepared on `release/vX.Y.Z` branches. After the release PR merges
+into `main` and main CI passes, GitHub Actions creates the annotated version tag
+and starts the release workflow automatically. See [Contributing](CONTRIBUTING.md#releases)
+for the release process and retry instructions.
+
 ## Exit statuses
 
 | Code | Meaning |
