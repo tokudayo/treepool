@@ -88,19 +88,37 @@ final class MenuStore: ObservableObject {
         slot.isPoolSlot && slot.exists && !slot.detached
     }
 
-    func requestRelease(_ slot: WorktreeInfo, in repository: RepositorySnapshot) {
-        let current: WorktreeInfo
-        do {
-            guard let found = try manager.list(in: repository.context).first(where: { $0.path == slot.path }),
-                  canRelease(found) else {
-                refresh()
-                return
+    func requestRelease(
+        _ slot: WorktreeInfo,
+        in repository: RepositorySnapshot,
+        window: NSWindow,
+        completion: @escaping @MainActor () -> Void
+    ) {
+        let manager = manager
+        Task { [weak self] in
+            do {
+                let current = try await Task.detached(priority: .userInitiated) {
+                    try manager.list(in: repository.context).first(where: { $0.path == slot.path })
+                }.value
+                guard let self, let current, self.canRelease(current), window.isVisible else {
+                    completion()
+                    self?.refresh()
+                    return
+                }
+                self.presentReleaseConfirmation(current, in: repository, window: window, completion: completion)
+            } catch {
+                self?.errorMessage = String(describing: error)
+                completion()
             }
-            current = found
-        } catch {
-            errorMessage = String(describing: error)
-            return
         }
+    }
+
+    private func presentReleaseConfirmation(
+        _ current: WorktreeInfo,
+        in repository: RepositorySnapshot,
+        window: NSWindow,
+        completion: @escaping @MainActor () -> Void
+    ) {
         let alert = NSAlert()
         alert.messageText = current.clean ? "Release \(current.name)?" : "Force release \(current.name)?"
         alert.informativeText = if !current.clean {
@@ -118,10 +136,11 @@ final class MenuStore: ObservableObject {
             alert.addButton(withTitle: "Abort")
             alert.addButton(withTitle: "Force Release")
         }
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        let response = alert.runModal()
-        guard response == (current.clean ? .alertFirstButtonReturn : .alertSecondButtonReturn) else { return }
-        release(current, in: repository, force: !current.clean)
+        alert.beginSheetModal(for: window) { [weak self] response in
+            completion()
+            guard response == (current.clean ? .alertFirstButtonReturn : .alertSecondButtonReturn) else { return }
+            self?.release(current, in: repository, force: !current.clean)
+        }
     }
 
     @discardableResult

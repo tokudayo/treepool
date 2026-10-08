@@ -231,7 +231,8 @@ Open `~/Applications/Treepool.app`, choose **Add Repository…**, then select a
 repository with `.twt.json`. The app shows worktree status, can reveal or copy
 worktree paths, and can release active slots. Choosing **Release Slot…** for a
 dirty slot warns you and offers **Abort** or **Force Release**, with the same
-behavior as `twt release --force`. Configure repositories
+behavior as `twt release --force`. The confirmation stays attached to the menu,
+and the menu remains open after confirming or aborting. Configure repositories
 with `twt init` or `twt setup` before adding them.
 
 ## Troubleshooting
