@@ -1,4 +1,5 @@
 import Foundation
+import Dispatch
 
 public struct CommandResult: Sendable {
     public let stdout: String
@@ -17,6 +18,9 @@ public enum ProcessRunner {
         allowFailure: Bool = false
     ) throws -> CommandResult {
         let process = Process()
+        // waitUntilExit pumps a run loop and adds polling latency to short commands on macOS.
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
         process.executableURL = executable.hasPrefix("/")
             ? URL(fileURLWithPath: executable)
             : URL(fileURLWithPath: "/usr/bin/env")
@@ -34,7 +38,7 @@ public enum ProcessRunner {
             } catch {
                 throw TreepoolError.git("\(executable): \(error.localizedDescription)")
             }
-            process.waitUntilExit()
+            exited.wait()
             let result = CommandResult(stdout: "", stderr: "", status: process.terminationStatus)
             if !allowFailure && result.status != 0 {
                 throw TreepoolError.git("\(executable) exited with status \(result.status)")
@@ -66,7 +70,7 @@ public enum ProcessRunner {
         } catch {
             throw TreepoolError.git("\(executable): \(error.localizedDescription)")
         }
-        process.waitUntilExit()
+        exited.wait()
         try? stdout.close()
         try? stderr.close()
         let output = String(decoding: (try? Data(contentsOf: stdoutURL)) ?? Data(), as: UTF8.self)

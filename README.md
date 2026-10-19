@@ -4,9 +4,7 @@
 
 <h1 align="center">Treepool</h1>
 
-<p align="center">
-  A warm-pool Git worktree manager for macOS and Linux.
-</p>
+<p align="center">Git worktree manager for macOS and Linux, for parallel agentic work.</p>
 
 <p align="center">
   <a href="#installation">Install</a> ·
@@ -15,27 +13,26 @@
   <a href="#configuration">Configuration</a>
 </p>
 
-Treepool keeps a reusable pool of detached Git worktrees ready for the next task.
-Create or switch to a branch in an idle slot instead of repeatedly creating and
-removing worktree directories.
+Treepool keeps a reusable pool of Git worktrees ready for the next task. Create or switch to a branch in an idle slot instead of repeatedly creating and removing worktrees.
+
+## Uh, why?
+
+The primary motivation is that additional setups, especially installing dependencies in a fresh worktree takes time. Treepool helps with that by keeping warm, ready-to-use worktree slots around so one would be instantly ready-to-use after allocation.
 
 ## Features
 
 - Reusable, pre-warmed worktree slots for parallel work.
 - One-command task pickup with `twt start`, whether the branch is active, existing, or new.
-- Safe release: dirty worktrees are refused by default; explicit force release can discard unstaged tracked changes.
-- Optional `fingerprint` file to reuse the idle slot closest to a branch's dependency state.
-- Optional `copyPatterns` to mirror repo files into newly assigned slots.
-- JSON output for scripts and coding-agent workflows.
-- Optional macOS menu-bar companion for viewing configured repositories.
+- Easy integration with agentic coding tools.
+- Optional macOS menu-bar for viewing configured repositories.
 
 ## Requirements
 
 - Git 2.34 or newer
 - macOS 14+ on Apple Silicon, or Linux on `x86_64`/`aarch64`
 
-Swift 6 is required only when building from source. Release Linux binaries are
-statically linked with Swift's musl SDK. macOS Intel is not supported in v0.1.1.
+Swift 6 is required only when building from source. Release Linux binaries are\
+statically linked with Swift's musl SDK. macOS Intel is not currently supported.
 
 ## Installation
 
@@ -46,9 +43,20 @@ curl -fsSL https://raw.githubusercontent.com/tokudayo/treepool/main/scripts/inst
 ```
 
 The release installer verifies the archive checksum and puts `twt` in
-`~/.local/bin`. If that directory is not on `PATH`, it prints the command needed
-to add it for the current shell. Set `TREEPOOL_VERSION=0.2.1` to install a
-specific release.
+`~/.local/bin`. If that directory is not on `PATH`, it prints the command needed\
+to add it for the current shell.
+
+Once installed, upgrade to the latest release from any directory:
+
+```sh
+twt upgrade
+```
+
+The command replaces the CLI you invoked and refreshes shell completions using
+the same checksum-verified release installer. Set `TREEPOOL_BIN_DIR` to choose
+another installation directory. Repository configuration, worktrees, and
+installed agent guidance are preserved. To select a specific release, use
+`twt upgrade --to 0.2.1`.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/tokudayo/treepool/main/scripts/install-release.sh | TREEPOOL_VERSION=0.2.1 bash
@@ -104,7 +112,7 @@ Release refuses dirty worktrees, detaches the clean slot, and preserves the
 branch. Treepool never deletes branches.
 
 Use `twt release --force` to discard unstaged tracked edits and deletions before
-releasing. Staged changes and non-ignored untracked files block force release
+releasing. Staged changes, intent-to-add files (`git add -N`), and non-ignored untracked files block force release
 before any changes are discarded. Ignored files are kept. Pre-release hooks
 run first; a failed hook stops force release too.
 
@@ -115,28 +123,16 @@ run first; a failed hook stops force release too.
 | `twt init [--slots N]` | Write `.twt.json` and create the warm worktree pool. |
 | `twt setup [--dry-run]` | Create missing slots from an existing committed `.twt.json`. |
 | `twt repair [--dry-run]` | Recreate missing configured slots after clearing only their stale registrations. |
-| `twt start BRANCH [--from REF] [--slot SLOT]` | Resume an active pool branch, switch an existing branch, or create a new branch. |
-| `twt new BRANCH [--from REF] [--slot SLOT]` | Create a branch from `REF` or the configured base branch, then apply configured `copyPatterns`. |
-| `twt switch BRANCH [--slot SLOT]` | Assign an existing local or `origin` branch to an idle slot, then apply configured `copyPatterns`. |
+| `twt start BRANCH [--from REF] [--slot SLOT]` | Resume an active pool branch, switch an existing branch, or create a new branch. For most use cases, just use this instead of thinking between `twt new` and `twt switch`.  |
+| `twt new BRANCH [--from REF] [--slot SLOT]` | Create a branch from `REF` or the configured base branch. |
+| `twt switch BRANCH [--slot SLOT]` | Assign an existing local or `origin` branch to an idle slot. |
 | `twt list` | Show branches, cleanliness, state, and paths. |
 | `twt release [QUERY] [--force]` | Detach an assigned slot while preserving its branch; `--force` discards unstaged tracked changes. |
+| `twt upgrade [--to VERSION]` | Install the latest CLI release, or a specific version, and refresh shell completions. |
 | `twt uninstall` | Remove Treepool and installed agent guidance while preserving repository state. |
 
-`--slot` accepts an exact or unambiguous partial slot name or path and requires
-that slot to be clean and detached when an assignment is needed. Without it,
-`start`, `new`, and `switch` use `fingerprint` selection when configured, then
-fall back to the oldest idle slot. If `start` finds the branch already active,
-it resumes that slot; a conflicting `--slot` is refused.
-`--from` is consulted only when `start` creates a branch, so the same invocation
-can safely resume or switch that branch later.
-`QUERY` accepts an exact or unambiguous partial slot name, branch, or path. With
-no query, `release` must run from an assigned Treepool pool slot.
 
-All lifecycle and list commands accept `--json`. Successful responses use a
-versioned envelope. `start`, `new`, and `switch` return the worktree in
-`data.path`; `start` also returns `data.action` as `resumed`, `switched`, or
-`created`.
-
+All lifecycle and list commands accept `--json`. Successful responses use a versioned envelope.
 ## Configuration
 
 `.twt.json` is repository policy and may be committed. Runtime timestamps and
@@ -188,6 +184,9 @@ Run your repository's usual setup commands in each assigned slot as needed.
 When `copyPatterns` is set, matching files are copied to the same relative paths
 in the assigned slot. Existing files at those paths are replaced. If a pattern
 matches no files, Treepool reports a warning but still assigns the slot.
+Treepool checks all destination parent directories before copying and refuses
+symbolic-link parents. A symbolic link at the destination file itself is replaced
+without modifying its target. Existing directories are not replaced by files.
 
 When `fingerprint` is set and no explicit `--slot` is passed, Treepool compares
 the file in the branch or creation base with the retained versions in clean,
@@ -214,7 +213,10 @@ twt config --opencode
 twt config --pi
 ```
 
-The document is installed globally for the chosen harness. Re-run with `--force`
+The source document is
+[`skills/use-treepool-worktrees/SKILL.md`](skills/use-treepool-worktrees/SKILL.md),
+with standard YAML metadata and Markdown instructions. It is embedded in the CLI
+at build time and installed globally for the chosen harness. Re-run with `--force`
 to replace a modified Treepool document. Inspect or remove guidance with:
 
 ```sh
@@ -231,7 +233,8 @@ Open `~/Applications/Treepool.app`, choose **Add Repository…**, then select a
 repository with `.twt.json`. The app shows worktree status, can reveal or copy
 worktree paths, and can release active slots. Choosing **Release Slot…** for a
 dirty slot warns you and offers **Abort** or **Force Release**, with the same
-behavior as `twt release --force`. Configure repositories
+behavior as `twt release --force`. The confirmation stays attached to the menu,
+and the menu remains open after confirming or aborting. Configure repositories
 with `twt init` or `twt setup` before adding them.
 
 ## Troubleshooting

@@ -172,13 +172,13 @@ private struct AssignedSlot {
 extension TreepoolManager {
     private func discardUnstagedChanges(at directory: URL, slotName: String) throws {
         let staged = try ProcessRunner.run(
-            "git", ["diff", "--cached", "--quiet", "--exit-code"],
+            "git", ["diff", "--cached", "--ita-visible-in-index", "--quiet", "--exit-code"],
             directory: directory,
             allowFailure: true
         )
         guard staged.status == 0 else {
             throw TreepoolError.unsafe(
-                "Refusing to force release \(slotName): staged changes must be committed or resolved first."
+                "Refusing to force release \(slotName): staged or intent-to-add changes must be committed or resolved first."
             )
         }
         guard try gitOutput(["ls-files", "--others", "--exclude-standard"], at: directory).isEmpty else {

@@ -4,14 +4,29 @@ All notable changes to Treepool are documented here.
 
 ## Unreleased
 
+## 0.2.2 - 2026-10-20
+
 ### Added
 
-- Automatically create an annotated version tag and start publication after a matching release branch is merged into main and its CI passes; validate the release branch, version, and dated changelog, reject conflicting tags, and support retries without duplicating active or published releases.
+- Add `twt upgrade` to install the latest CLI release and refresh shell completions, with `--to VERSION` for a specific release; repository configuration, worktrees, and installed agent guidance are preserved.
+
+### Changed
+
+- Move agent guidance into a standard `skills/use-treepool-worktrees/SKILL.md` document, embedded in the standalone CLI at build time.
+
+### Fixed
+
+- Refuse force release when intent-to-add files (`git add -N`) are present before discarding any unstaged tracked changes.
+- Refuse `copyPatterns` destinations with symbolic-link parent directories before copying any files, and anchor writes to the slot directory so copying cannot overwrite files outside the worktree through a destination symlink.
+- Open and close the macOS menu popover immediately without its zoom/fade animation, and move release confirmation scans off the UI thread.
+- Keep the macOS menu popover open while showing and responding to an attached release confirmation sheet, including Abort and Force Release.
+- Wait for process exit notifications directly instead of run-loop polling to reduce delays in Git commands and worktree refreshes.
 
 ## 0.2.1 - 2026-10-09
 
 ### Added
 
+- Automatically create an annotated version tag and start publication after a matching release branch is merged into main and its CI passes; validate the release branch, version, and dated changelog, reject conflicting tags, and support retries without duplicating active or published releases.
 - Add `twt release --force` to discard unstaged tracked changes before releasing, and an Abort / Force Release warning for dirty slots in the macOS menu-bar app; staged changes, untracked files, ignored files, branches, and commits are preserved.
 - Add an optional `.twt.json` `fingerprint` file that prefers an idle slot with an exact content hash or, when no hash matches, the smallest line diff to the branch being assigned.
 

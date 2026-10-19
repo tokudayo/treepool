@@ -5,6 +5,7 @@ import TreepoolCore
 
 struct MenuPopoverContent: View {
     @ObservedObject var store: MenuStore
+    let requestRelease: (WorktreeInfo, RepositorySnapshot) -> Void
     @State private var expandedRepositoryIDs: Set<String> = []
     @State private var hoveredRepositoryID: String?
     @State private var isManagingOpenApplications = false
@@ -192,7 +193,7 @@ struct MenuPopoverContent: View {
             if store.canRelease(slot) {
                 Divider()
                 Button("Release Slot…", role: .destructive) {
-                    store.requestRelease(slot, in: repository)
+                    requestRelease(slot, repository)
                 }
             }
         } label: {

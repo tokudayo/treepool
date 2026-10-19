@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import SwiftUI
+import TreepoolCore
 
 func treepoolSymbolImage(for appearance: NSAppearance) -> NSImage? {
     let variant = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
@@ -21,13 +22,17 @@ final class MenuAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate 
     private var statusItem: NSStatusItem?
     private var outsideClickMonitor: Any?
     private var appearanceObserver: NSKeyValueObservation?
+    private var isConfirmingRelease = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.accessory)
         popover.behavior = .transient
+        popover.animates = false
         popover.delegate = self
         popover.contentViewController = NSHostingController(
-            rootView: MenuPopoverContent(store: store)
+            rootView: MenuPopoverContent(store: store) { [weak self] slot, repository in
+                self?.requestRelease(slot, in: repository)
+            }
         )
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -53,7 +58,25 @@ final class MenuAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate 
         removeOutsideClickMonitor()
     }
 
+    func popoverShouldClose(_ popover: NSPopover) -> Bool {
+        !isConfirmingRelease
+    }
+
+    private func requestRelease(_ slot: WorktreeInfo, in repository: RepositorySnapshot) {
+        guard !isConfirmingRelease,
+              let window = popover.contentViewController?.view.window else { return }
+        isConfirmingRelease = true
+        popover.behavior = .applicationDefined
+        store.requestRelease(slot, in: repository, window: window) { [weak self] in
+            guard let self else { return }
+            self.isConfirmingRelease = false
+            self.popover.contentViewController?.view.window?.makeKey()
+            self.popover.behavior = .transient
+        }
+    }
+
     @objc private func togglePopover(_ sender: Any?) {
+        guard !isConfirmingRelease else { return }
         guard let button = statusItem?.button else { return }
         if popover.isShown {
             closePopover(sender)
@@ -67,6 +90,7 @@ final class MenuAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate 
     }
 
     private func closePopover(_ sender: Any?) {
+        guard !isConfirmingRelease else { return }
         popover.performClose(sender)
         removeOutsideClickMonitor()
     }
