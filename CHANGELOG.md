@@ -4,6 +4,8 @@ All notable changes to Treepool are documented here.
 
 ## Unreleased
 
+## 0.2.2 - 2026-10-20
+
 ### Added
 
 - Add `twt upgrade` to install the latest CLI release and refresh shell completions, with `--to VERSION` for a specific release; repository configuration, worktrees, and installed agent guidance are preserved.
