@@ -72,18 +72,14 @@ extension TreepoolManager {
     }
 
     private func copy(_ paths: [String], from sourceRoot: URL, to destinationRoot: URL) throws {
+        guard !paths.isEmpty else { return }
+        let destination = try ConfiguredCopyDestination(root: destinationRoot)
+        // Refuse unsafe destinations before replacing even the first matched file.
+        for path in paths { try destination.validateParent(of: path) }
         for relativePath in paths {
             let sourceURL = sourceRoot.appendingPathComponent(relativePath)
-            let destinationURL = destinationRoot.appendingPathComponent(relativePath)
             do {
-                try fileManager.createDirectory(
-                    at: destinationURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                let exists = fileManager.fileExists(atPath: destinationURL.path)
-                    || (try? fileManager.destinationOfSymbolicLink(atPath: destinationURL.path)) != nil
-                if exists { try fileManager.removeItem(at: destinationURL) }
-                try fileManager.copyItem(at: sourceURL, to: destinationURL)
+                try destination.copyFile(from: sourceURL, to: relativePath)
             } catch {
                 throw TreepoolError.unsafe(
                     "Failed to copy '\(relativePath)' into \(destinationRoot.path): \(error.localizedDescription)"

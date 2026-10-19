@@ -350,7 +350,7 @@ struct Release: ParsableCommand {
     @Argument(help: "Slot, branch, or partial name. Defaults to the current managed slot.")
     var query: String?
 
-    @Flag(name: .long, help: "Discard unstaged tracked changes before release. Staged changes and untracked files are refused.")
+    @Flag(name: .long, help: "Discard unstaged tracked changes before release. Staged changes, intent-to-add files, and untracked files are refused.")
     var force = false
 
     @Flag(name: .long, help: "Emit machine-readable JSON.")

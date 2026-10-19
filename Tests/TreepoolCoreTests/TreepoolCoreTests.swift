@@ -174,17 +174,21 @@ struct TreepoolCoreTests {
         #expect(try fixture.run("git", ["rev-parse", "refs/heads/feature/force"], at: root).stdout == active.head)
     }
 
-    @Test(arguments: ["staged", "untracked"])
+    @Test(arguments: ["staged", "untracked", "intent-to-add", "empty-intent-to-add"])
     func forceReleaseRefusesProtectedChangesBeforeDiscardingAnything(kind: String) throws {
         let fixture = try Fixture(); defer { fixture.cleanup() }
         let context = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
         let active = try fixture.manager.createBranch("feature/protected", from: "main", in: context)
         let root = URL(fileURLWithPath: active.path)
+        let newContents = kind == "empty-intent-to-add" ? "" : "untracked\n"
         if kind == "staged" {
             try Data("staged\n".utf8).write(to: root.appendingPathComponent("README.md"))
             try fixture.run("git", ["add", "README.md"], at: root)
         } else {
-            try Data("untracked\n".utf8).write(to: root.appendingPathComponent("new.txt"))
+            try Data(newContents.utf8).write(to: root.appendingPathComponent("new.txt"))
+            if kind == "intent-to-add" || kind == "empty-intent-to-add" {
+                #expect(try fixture.run("git", ["add", "-N", "new.txt"], at: root).status == 0)
+            }
         }
         try Data("unstaged\n".utf8).write(to: root.appendingPathComponent("README.md"))
         let before = try fixture.run("git", ["status", "--porcelain"], at: root).stdout
@@ -198,7 +202,7 @@ struct TreepoolCoreTests {
         if kind == "staged" {
             #expect(try fixture.run("git", ["show", ":README.md"], at: root).stdout == "staged")
         } else {
-            #expect(try String(contentsOf: root.appendingPathComponent("new.txt"), encoding: .utf8) == "untracked\n")
+            #expect(try String(contentsOf: root.appendingPathComponent("new.txt"), encoding: .utf8) == newContents)
         }
     }
 
@@ -452,6 +456,113 @@ struct TreepoolCoreTests {
         )
         #expect(result.warnings.contains("copyPatterns pattern 'missing/**/*.txt' matched no files."))
         #expect(result.slot.branch == "feature/missing-copy")
+    }
+
+    @Test(arguments: ["directory", "dangling", "nested"])
+    func copyPatternsRefuseSymlinkAncestorsBeforeCopyingAnything(kind: String) throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let source = fixture.repository
+        let destination = fixture.temporaryDirectory.appendingPathComponent("destination")
+        let outside = fixture.temporaryDirectory.appendingPathComponent("outside")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let relativeParent = kind == "nested" ? "config/local" : "config"
+        try FileManager.default.createDirectory(
+            at: source.appendingPathComponent(relativeParent), withIntermediateDirectories: true
+        )
+        try Data("secret\n".utf8).write(to: source.appendingPathComponent("\(relativeParent)/credentials"))
+        try Data("original\n".utf8).write(to: outside.appendingPathComponent("credentials"))
+        try Data("keep\n".utf8).write(to: destination.appendingPathComponent("README.md"))
+        if kind == "nested" {
+            try FileManager.default.createDirectory(
+                at: destination.appendingPathComponent("config"), withIntermediateDirectories: true
+            )
+        }
+        let target = kind == "dangling" ? outside.appendingPathComponent("missing") : outside
+        try FileManager.default.createSymbolicLink(
+            at: destination.appendingPathComponent(relativeParent), withDestinationURL: target
+        )
+
+        #expect(throws: TreepoolError.self) {
+            try fixture.manager.copyConfiguredFiles(
+                from: source, to: destination,
+                patterns: ["README.md", "\(relativeParent)/credentials"]
+            )
+        }
+        #expect(try String(contentsOf: outside.appendingPathComponent("credentials"), encoding: .utf8) == "original\n")
+        #expect(try String(contentsOf: destination.appendingPathComponent("README.md"), encoding: .utf8) == "keep\n")
+        #expect(!FileManager.default.fileExists(atPath: outside.appendingPathComponent("missing").path))
+    }
+
+    @Test
+    func copyPatternsReplaceLeafSymlinksWithoutTouchingTheirTargets() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let destination = fixture.temporaryDirectory.appendingPathComponent("destination")
+        let outside = fixture.temporaryDirectory.appendingPathComponent("outside.txt")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try Data("keep\n".utf8).write(to: outside)
+        let leaf = destination.appendingPathComponent("README.md")
+        try FileManager.default.createSymbolicLink(at: leaf, withDestinationURL: outside)
+
+        _ = try fixture.manager.copyConfiguredFiles(
+            from: fixture.repository, to: destination, patterns: ["README.md"]
+        )
+        #expect(try String(contentsOf: leaf, encoding: .utf8) == "hello\n")
+        #expect(try String(contentsOf: outside, encoding: .utf8) == "keep\n")
+        #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: leaf.path)) == nil)
+    }
+
+    @Test
+    func branchAssignmentRefusesCopyThroughTrackedDirectorySymlink() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let outside = fixture.temporaryDirectory.appendingPathComponent("outside")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let externalFile = outside.appendingPathComponent("credentials")
+        try Data("keep\n".utf8).write(to: externalFile)
+        try fixture.run("git", ["switch", "-c", "feature/symlink"], at: fixture.repository)
+        try FileManager.default.createSymbolicLink(
+            at: fixture.repository.appendingPathComponent("config"), withDestinationURL: outside
+        )
+        try fixture.run("git", ["add", "config"], at: fixture.repository)
+        try fixture.run("git", ["commit", "-m", "directory symlink"], at: fixture.repository)
+        try fixture.run("git", ["switch", "main"], at: fixture.repository)
+        _ = try fixture.manager.initialize(at: fixture.repository, slotCount: 1)
+        try FileManager.default.createDirectory(
+            at: fixture.repository.appendingPathComponent("config"), withIntermediateDirectories: true
+        )
+        try Data("secret\n".utf8).write(to: fixture.repository.appendingPathComponent("config/credentials"))
+        try fixture.writeConfig(.init(
+            baseBranch: "main", pool: .init(size: 1, root: "../sample.worktrees"),
+            copyPatterns: ["config/credentials"]
+        ))
+        let context = try fixture.manager.context(at: fixture.repository)
+
+        #expect(throws: TreepoolError.self) {
+            try fixture.manager.switchBranch("feature/symlink", in: context)
+        }
+        #expect(try String(contentsOf: externalFile, encoding: .utf8) == "keep\n")
+    }
+
+    @Test
+    func configuredCopyPreservesExecutablePermissionsAndSourceSymlinks() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let destination = fixture.temporaryDirectory.appendingPathComponent("destination")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let executable = fixture.repository.appendingPathComponent("tool.sh")
+        try Data("#!/bin/sh\necho hello\n".utf8).write(to: executable)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        try FileManager.default.createSymbolicLink(
+            atPath: fixture.repository.appendingPathComponent("tool-link").path,
+            withDestinationPath: "tool.sh"
+        )
+
+        _ = try fixture.manager.copyConfiguredFiles(
+            from: fixture.repository, to: destination, patterns: ["tool*"]
+        )
+        #expect(try String(contentsOf: destination.appendingPathComponent("tool.sh"), encoding: .utf8) == "#!/bin/sh\necho hello\n")
+        let attributes = try FileManager.default.attributesOfItem(atPath: destination.appendingPathComponent("tool.sh").path)
+        #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o755)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: destination.appendingPathComponent("tool-link").path) == "tool.sh")
     }
 
     @Test

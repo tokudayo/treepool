@@ -3,6 +3,7 @@ set -euo pipefail
 
 TWT="${1:?usage: smoke-test.sh /path/to/twt}"
 TWT="$(cd "$(dirname "$TWT")" && pwd)/$(basename "$TWT")"
+SKILL_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/skills/use-treepool-worktrees/SKILL.md"
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/treepool-smoke.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 REPO="$STAGE/repository"
@@ -68,6 +69,7 @@ SKILLS=(
 for harness in codex claude-code opencode pi; do
   HOME="$INSTALL/home" "$INSTALL/bin/twt" config "--$harness" >/dev/null
 done
+for skill in "${SKILLS[@]}"; do cmp "$SKILL_SOURCE" "$skill"; done
 HOME="$INSTALL/home" "$INSTALL/bin/twt" config --show | grep 'Codex: current' >/dev/null
 HOME="$INSTALL/home" "$INSTALL/bin/twt" config --codex --remove --dry-run >/dev/null
 test -f "${SKILLS[0]}"

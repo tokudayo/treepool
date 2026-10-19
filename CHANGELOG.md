@@ -8,8 +8,14 @@ All notable changes to Treepool are documented here.
 
 - Add `twt upgrade` to install the latest CLI release and refresh shell completions, with `--to VERSION` for a specific release; repository configuration, worktrees, and installed agent guidance are preserved.
 
+### Changed
+
+- Move agent guidance into a standard `skills/use-treepool-worktrees/SKILL.md` document, embedded in the standalone CLI at build time.
+
 ### Fixed
 
+- Refuse force release when intent-to-add files (`git add -N`) are present before discarding any unstaged tracked changes.
+- Refuse `copyPatterns` destinations with symbolic-link parent directories before copying any files, and anchor writes to the slot directory so copying cannot overwrite files outside the worktree through a destination symlink.
 - Open and close the macOS menu popover immediately without its zoom/fade animation, and move release confirmation scans off the UI thread.
 - Keep the macOS menu popover open while showing and responding to an attached release confirmation sheet, including Abort and Force Release.
 - Wait for process exit notifications directly instead of run-loop polling to reduce delays in Git commands and worktree refreshes.

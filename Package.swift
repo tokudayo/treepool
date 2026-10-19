@@ -13,7 +13,7 @@ var targets: [Target] = [
             "TreepoolCore",
             .product(name: "ArgumentParser", package: "swift-argument-parser"),
         ],
-        plugins: [.plugin(name: "VersionPlugin")]
+        plugins: [.plugin(name: "VersionPlugin"), .plugin(name: "SkillPlugin")]
     ),
     .testTarget(
         name: "TreepoolCoreTests",
@@ -33,6 +33,15 @@ var targets: [Target] = [
     .executableTarget(
         name: "VersionGenerator",
         path: "Plugins/VersionGenerator"
+    ),
+    .executableTarget(
+        name: "SkillGenerator",
+        path: "Plugins/SkillGenerator"
+    ),
+    .plugin(
+        name: "SkillPlugin",
+        capability: .buildTool(),
+        dependencies: ["SkillGenerator"]
     ),
     .plugin(
         name: "VersionPlugin",
