@@ -8,6 +8,10 @@ All notable changes to Treepool are documented here.
 
 - Distribute the Apple Silicon macOS menu-bar app as an ad-hoc-signed DMG with an Applications shortcut, installation instructions, release checksums, and build provenance; no Apple Developer Program membership is required.
 
+### Changed
+
+- Present the DMG as a drag-to-install Finder window with large Treepool and Applications icons and a visual hint, without a separate installation text file.
+
 ### Documentation
 
 - Document DMG installation and the macOS Privacy & Security first-launch exception for the app.

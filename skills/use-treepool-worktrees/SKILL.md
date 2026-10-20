@@ -84,6 +84,7 @@ latest release and refreshes shell completions. Use `twt upgrade --to X.Y.Z` for
 release. Repository configuration, worktrees, and installed agent guidance are preserved.
 
 The macOS menu-bar app is also distributed as an ad-hoc-signed DMG in GitHub Releases.
+Drag Treepool onto the Applications shortcut in the DMG window to install the app.
 Install the CLI separately; `twt upgrade` updates the CLI, not the app.
 
 Use `twt config --<harness> --remove` to remove one installed skill, or `twt uninstall` to

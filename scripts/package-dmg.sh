@@ -7,19 +7,16 @@ VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/treepool-dmg.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 "$ROOT/scripts/package-app.sh" "$1" "$STAGE/Treepool.app"
-ln -s /Applications "$STAGE/Applications"
-cat > "$STAGE/Install.txt" <<'TEXT'
-Drag Treepool.app into Applications, then open it.
-Treepool requires macOS 14 or later on Apple Silicon.
-This app is ad-hoc signed, without Apple Developer ID signing or notarization.
-If macOS blocks it, dismiss the alert, open System Settings > Privacy & Security,
-and choose Open Anyway for Treepool, then confirm Open.
-See https://support.apple.com/102445 for Apple's instructions.
-Install the twt CLI separately using the instructions at:
-https://github.com/tokudayo/Treepool#installation
-TEXT
+# Keep packaging tools isolated from the developer's Python environment.
+TOOLS="$ROOT/.build/dmg-tools"
+if [[ ! -x "$TOOLS/bin/python3" ]]; then
+  python3 -m venv "$TOOLS"
+fi
+"$TOOLS/bin/python3" -m pip install --disable-pip-version-check 'dmgbuild==1.6.5'
+swift "$ROOT/scripts/dmg-background.swift" "$STAGE/background.png"
 mkdir -p "$ROOT/dist"
 DMG="$ROOT/dist/treepool-v${VERSION}-macos-arm64.dmg"
-hdiutil create -volname Treepool -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+"$TOOLS/bin/python3" "$ROOT/scripts/dmg-settings.py" \
+  "$STAGE/Treepool.app" "$STAGE/background.png" "$DMG"
 hdiutil verify "$DMG"
 echo "$DMG"

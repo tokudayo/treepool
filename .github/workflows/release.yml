@@ -34,6 +34,9 @@ jobs:
           mount="$(mktemp -d)"
           hdiutil attach dist/*.dmg -nobrowse -readonly -mountpoint "$mount"
           trap 'hdiutil detach "$mount"; rmdir "$mount"' EXIT
+          test ! -e "$mount/Install.txt"
+          test -f "$mount/.DS_Store"
+          test -f "$mount/.background.png"
           codesign --verify --strict "$mount/Treepool.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$mount/Treepool.app/Contents/Info.plist")" = "$(cat VERSION)"
           test "$(readlink "$mount/Applications")" = /Applications
