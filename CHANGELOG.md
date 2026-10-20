@@ -4,8 +4,6 @@ All notable changes to Treepool are documented here.
 
 ## Unreleased
 
-## 0.2.3 - 2026-10-20
-
 ### Added
 
 - Distribute the Apple Silicon macOS menu-bar app as an ad-hoc-signed DMG with an Applications shortcut, installation instructions, release checksums, and build provenance; no Apple Developer Program membership is required.

@@ -70,7 +70,7 @@ swift test
 scripts/install.sh
 ```
 
-Download `treepool-v0.2.3-macos-arm64.dmg` from [GitHub Releases](https://github.com/tokudayo/Treepool/releases/latest) for the optional menu-bar app. Open the disk image and drag `Treepool.app` to Applications. The DMG includes the app; install the CLI separately using the command above.
+Starting with v0.2.3, download `treepool-v<VERSION>-macos-arm64.dmg` from [GitHub Releases](https://github.com/tokudayo/Treepool/releases/latest) for the optional menu-bar app. Open the disk image and drag `Treepool.app` to Applications. The DMG includes the app; install the CLI separately using the command above.
 
 The app is ad-hoc signed, without Developer ID signing or Apple notarization. If macOS blocks the first launch, dismiss the alert, go to **System Settings → Privacy & Security**, and choose **Open Anyway** for Treepool, then confirm **Open**. See [Apple’s instructions](https://support.apple.com/102445). No global security settings need to be disabled.
 
