@@ -43,4 +43,4 @@ def finish_layout(event):
 
 settings = {key: value for key, value in globals().copy().items() if not key.startswith("_")}
 settings["create_hook"] = remember_mount
-build_dmg(output, "Install Treepool", settings=settings, callback=finish_layout)
+build_dmg(output, "Treepool", settings=settings, callback=finish_layout)
