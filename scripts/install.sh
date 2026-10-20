@@ -25,7 +25,7 @@ install -m 0644 "$STAGE/twt.bash" "$BASH_COMPLETION_DIR/twt"
 install -m 0644 "$STAGE/twt.fish" "$FISH_COMPLETION_DIR/twt.fish"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
-  APP_DIR="${TREEPOOL_APP_DIR:-$HOME/Applications}"
+  APP_DIR="${TREEPOOL_APP_DIR:-/Applications}"
   swift build -c release --product TreepoolMenu
   APP_STAGE="$STAGE/Treepool.app"
   mkdir -p "$APP_DIR"

@@ -85,6 +85,7 @@ release. Repository configuration, worktrees, and installed agent guidance are p
 
 The macOS menu-bar app is also distributed as an ad-hoc-signed DMG in GitHub Releases.
 Drag Treepool onto the Applications shortcut in the DMG window to install the app.
+The source installer also defaults to `/Applications`; `TREEPOOL_APP_DIR` overrides the app directory for source installation and uninstallation.
 Install the CLI separately; `twt upgrade` updates the CLI, not the app.
 
 Use `twt config --<harness> --remove` to remove one installed skill, or `twt uninstall` to

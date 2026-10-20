@@ -10,6 +10,7 @@ All notable changes to Treepool are documented here.
 
 ### Changed
 
+- Default source app installation and CLI app uninstallation to `/Applications`, matching the DMG destination; `TREEPOOL_APP_DIR` remains available for custom locations.
 - Present the DMG as a drag-to-install Finder window with large Treepool and Applications icons and a directional arrow, without a separate installation text file.
 
 ### Documentation

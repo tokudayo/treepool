@@ -74,7 +74,7 @@ Starting with v0.2.3, download `treepool-v<VERSION>-macos-arm64.dmg` from [GitHu
 
 The app is ad-hoc signed, without Developer ID signing or Apple notarization. If macOS blocks the first launch, dismiss the alert, go to **System Settings → Privacy & Security**, and choose **Open Anyway** for Treepool, then confirm **Open**. See [Apple’s instructions](https://support.apple.com/102445). No global security settings need to be disabled.
 
-The source installer also installs `Treepool.app` in `~/Applications`.
+The source installer also installs `Treepool.app` in `/Applications`.
 
 Uninstall binaries and installed agent guidance without touching repository
 configuration or worktrees:
@@ -231,7 +231,7 @@ Removal preserves modified skill files unless `--force` is passed.
 
 ## macOS menu-bar app
 
-Open `Treepool.app` from Applications (or `~/Applications` for source installs), choose **Add Repository…**, then select a
+Open `Treepool.app` from Applications, choose **Add Repository…**, then select a
 repository with `.twt.json`. The app shows worktree status, can reveal or copy
 worktree paths, and can release active slots. Choosing **Release Slot…** for a
 dirty slot warns you and offers **Abort** or **Force Release**, with the same
