@@ -27,6 +27,19 @@ jobs:
         run: test "$GITHUB_REF_NAME" = "v$(tr -d '[:space:]' < VERSION)"
       - run: swift test
       - run: swift build -c release --product twt
+      - run: swift build -c release --product TreepoolMenu
+      - run: scripts/package-dmg.sh .build/release/TreepoolMenu
+      - name: Verify packaged app
+        run: |
+          mount="$(mktemp -d)"
+          hdiutil attach dist/*.dmg -nobrowse -readonly -mountpoint "$mount"
+          trap 'hdiutil detach "$mount"; rmdir "$mount"' EXIT
+          codesign --verify --strict "$mount/Treepool.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$mount/Treepool.app/Contents/Info.plist")" = "$(cat VERSION)"
+          test "$(readlink "$mount/Applications")" = /Applications
+          test -f "$mount/Treepool.app/Contents/Resources/Treepool-symbol-on-dark.png"
+          test -f "$mount/Treepool.app/Contents/Resources/Treepool-symbol-on-light.png"
+          lipo "$mount/Treepool.app/Contents/MacOS/TreepoolMenu" -verify_arch arm64
       - run: scripts/package-release.sh macos arm64 .build/release/twt .build/release/twt
       - name: Smoke test packaged binary
         run: |
@@ -39,7 +52,9 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: macos-arm64
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*.dmg
 
   linux:
     runs-on: ubuntu-24.04
@@ -103,9 +118,9 @@ jobs:
       - name: Build release manifest
         run: |
           cd dist
-          sha256sum *.tar.gz > SHA256SUMS
+          sha256sum *.tar.gz *.dmg > SHA256SUMS
           printf '{"version":"%s","artifacts":' "$(cat ../VERSION)" > dependency-manifest.json
-          find . -maxdepth 1 -name '*.tar.gz' -printf '%f\n' | sort | jq -R . | jq -s . >> dependency-manifest.json
+          find . -maxdepth 1 \( -name '*.tar.gz' -o -name '*.dmg' \) -printf '%f\n' | sort | jq -R . | jq -s . >> dependency-manifest.json
           printf '}\n' >> dependency-manifest.json
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
