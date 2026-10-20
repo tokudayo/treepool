@@ -23,6 +23,23 @@ jobs:
           swift build --product twt
           scripts/smoke-test.sh .build/debug/twt
 
+      - run: swift build -c release --product TreepoolMenu
+      - run: scripts/package-dmg.sh .build/release/TreepoolMenu
+      - name: Verify packaged app
+        run: |
+          mount="$(mktemp -d)"
+          hdiutil attach dist/*.dmg -nobrowse -readonly -mountpoint "$mount"
+          trap 'hdiutil detach "$mount"; rmdir "$mount"' EXIT
+          test ! -e "$mount/Install.txt"
+          test -f "$mount/.DS_Store"
+          test -f "$mount/.background.png"
+          codesign --verify --strict "$mount/Treepool.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$mount/Treepool.app/Contents/Info.plist")" = "$(cat VERSION)"
+          test "$(readlink "$mount/Applications")" = /Applications
+          test -f "$mount/Treepool.app/Contents/Resources/Treepool-symbol-on-dark.png"
+          test -f "$mount/Treepool.app/Contents/Resources/Treepool-symbol-on-light.png"
+          lipo "$mount/Treepool.app/Contents/MacOS/TreepoolMenu" -verify_arch arm64
+
   linux:
     runs-on: ubuntu-24.04
     strategy:

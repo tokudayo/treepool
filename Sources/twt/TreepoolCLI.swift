@@ -417,7 +417,7 @@ struct Uninstall: ParsableCommand {
         #if os(macOS)
         let appDirectory = directory(
             "TREEPOOL_APP_DIR",
-            default: home.appendingPathComponent("Applications")
+            default: URL(fileURLWithPath: "/Applications", isDirectory: true)
         )
         targets.append(appDirectory.appendingPathComponent("Treepool.app"))
         #endif

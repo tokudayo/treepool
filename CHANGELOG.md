@@ -4,6 +4,19 @@ All notable changes to Treepool are documented here.
 
 ## Unreleased
 
+### Added
+
+- Distribute the Apple Silicon macOS menu-bar app as an ad-hoc-signed DMG with an Applications shortcut, installation instructions, release checksums, and build provenance; no Apple Developer Program membership is required.
+
+### Changed
+
+- Default source app installation and CLI app uninstallation to `/Applications`, matching the DMG destination; `TREEPOOL_APP_DIR` remains available for custom locations.
+- Present the DMG as a drag-to-install Finder window with large Treepool and Applications icons and a directional arrow, without a separate installation text file.
+
+### Documentation
+
+- Document DMG installation and the macOS Privacy & Security first-launch exception for the app.
+
 ## 0.2.2 - 2026-10-20
 
 ### Added
