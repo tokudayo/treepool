@@ -10,7 +10,7 @@ All notable changes to Treepool are documented here.
 
 ### Changed
 
-- Present the DMG as a drag-to-install Finder window with large Treepool and Applications icons and a visual hint, without a separate installation text file.
+- Present the DMG as a drag-to-install Finder window with large Treepool and Applications icons and a directional arrow, without a separate installation text file.
 
 ### Documentation
 
